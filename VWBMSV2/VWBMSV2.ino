@@ -58,7 +58,7 @@ This version of SimpBMS has been modified as the Space Balls edition utilising t
 #include "BMSCan.h"
 
 #define CPU_REBOOT (_reboot_Teensyduino_());
-#define DEFAULT_CAN_INTERFACE_INDEX 0
+#define DEFAULT_CAN_INTERFACE_INDEX 1
 
 BMSModuleManager bms;
 SerialConsole console;
@@ -106,7 +106,6 @@ byte bmsstatus = 0;
 #define Analoguedual 1
 #define Canbus 2
 #define Analoguesing 3
-#define TeslaSPI 4
 #define TeslaSPICS 36
 //
 
@@ -116,6 +115,7 @@ byte bmsstatus = 0;
 #define VictronLynx 4
 #define LemCAB500 2
 #define CurCanMax 4 // max value
+#define TeslaP100D 5
 
 //Charger Types
 #define NoCharger 0
@@ -127,6 +127,8 @@ byte bmsstatus = 0;
 #define Coda 6
 #define Outlander 8
 //
+int outlander_charger_reported_voltage = 0;
+int outlander_charger_reported_current = 0;
 
 int Discharge;
 int ErrorReason = 0;
@@ -336,11 +338,12 @@ void setup()
   SPI.setSCK (MCP2515_SCK) ;
   SPI.begin () ;
 
+  #ifdef __MK66FX1M0__
   SPI1.setMOSI (MCP2515_SI_2) ;
   SPI1.setMISO (MCP2515_SO_2) ;
   SPI1.setSCK (MCP2515_SCK_2) ;
   SPI1.begin () ;
-  
+  #endif
 
 
   //if using enable pins on a transceiver they need to be set on
@@ -887,7 +890,7 @@ if (settings.ESSmode == 1)
     {
       getcurrent();
     }
-    if (settings.cursens == TeslaSPI) 
+    if (settings.cursens == TeslaP100D) 
     {
       RawCur = readTeslaSPI();
       //getcurrent();
@@ -1722,8 +1725,8 @@ void VEcan() //communication with Victron system over CAN
   msg.buf[3] = highByte(SOH);
   msg.buf[4] = lowByte(SOC * 10);
   msg.buf[5] = highByte(SOC * 10);
-  msg.buf[6] = 0;
-  msg.buf[7] = 0;
+  msg.buf[6] = lowByte(bmsstatus);
+  msg.buf[7] = highByte(bmsstatus);
   bmscan.write(msg, settings.veCanIndex);
 
   msg.id  = 0x356;
@@ -1734,8 +1737,8 @@ void VEcan() //communication with Victron system over CAN
   msg.buf[3] = highByte(long(currentact / 100));
   msg.buf[4] = lowByte(int16_t(bms.getAvgTemperature() * 10));
   msg.buf[5] = highByte(int16_t(bms.getAvgTemperature() * 10));
-  msg.buf[6] = 0;
-  msg.buf[7] = 0;
+  msg.buf[6] = lowByte(uint16_t(bms.getAvgCellVolt() * 1000));
+  msg.buf[7] = highByte(uint16_t(bms.getAvgCellVolt() * 1000));
   bmscan.write(msg, settings.veCanIndex);
 
   delay(2);
@@ -2103,9 +2106,6 @@ void menu()
 
       case '7': //s for switch sensor
         settings.curcan++;
-        if (settings.curcan > CurCanMax) {
-          settings.curcan = 1;
-        }
         menuload = 1;
         incomingByte = 'c';
         break;
@@ -2305,7 +2305,11 @@ void menu()
        case 'c':
         if (Serial.available() > 0)
         {
+           #ifdef __MK66FX1M0__
           settings.chargerCanIndex++;
+          #else
+          settings.chargerCanIndex = settings.chargerCanIndex + 2;
+          #endif
           if (settings.chargerCanIndex > 3) {
             settings.chargerCanIndex = 0;
           }
@@ -2317,7 +2321,11 @@ void menu()
        case 'v':
         if (Serial.available() > 0)
         {
+          #ifdef __MK66FX1M0__
           settings.veCanIndex++;
+          #else
+          settings.veCanIndex = settings.veCanIndex + 2;
+          #endif
           if (settings.veCanIndex > 3) {
             settings.veCanIndex = 0;
           }
@@ -2531,7 +2539,11 @@ void menu()
      case 'l': //secondary battery pack interface
         if (Serial.available() > 0)
         {
+          #ifdef __MK66FX1M0__
           settings.secondBatteryCanIndex++;
+          #else
+          settings.secondBatteryCanIndex = settings.secondBatteryCanIndex + 2;
+          #endif
           if (settings.secondBatteryCanIndex > 3) {
             settings.secondBatteryCanIndex = 0;
           }
@@ -2926,8 +2938,8 @@ void menu()
           case Canbus:
             SERIALCONSOLE.println(" Canbus Current Sensor ");
             break;
-          case TeslaSPI:
-            SERIALCONSOLE.println("  TESLA SPI Current Sensor ");
+          case TeslaP100D:
+            SERIALCONSOLE.println("  TESLA P100D SPI Current Sensor ");
             break;
           default:
             SERIALCONSOLE.println("Undefined");
@@ -3129,6 +3141,7 @@ void menu()
 void canread(int canInterfaceOffset, int idOffset)
 {
   bmscan.read(inMsg, canInterfaceOffset);
+
   // Read data: len = data length, buf = data byte(s)
   if ( settings.cursens == Canbus)
   {
@@ -3218,6 +3231,13 @@ void canread(int canInterfaceOffset, int idOffset)
       bms.decodetemp(inMsg, 0);
     }
 
+  }
+
+  if (settings.chargerCanIndex == canInterfaceOffset && settings.chargertype == Outlander) {
+    if (inMsg.id == 0x389) {
+      outlander_charger_reported_voltage = rxBuf[0] * 2;
+      outlander_charger_reported_current = rxBuf[3];
+    }
   }
 
   if (candebug == 1)
@@ -3416,6 +3436,16 @@ void currentlimit()
     }
 
   }
+
+  //extra safety check
+  if (settings.chargertype == Outlander) {
+    uint16_t fullVoltage = uint16_t(settings.ChargeVsetpoint * settings.Scells * 10);
+    if (outlander_charger_reported_voltage > fullVoltage) {
+//      chargecurrent = 0;
+    }
+    
+  }
+  
   ///No negative currents///
 
   if (discurrent < 0)
