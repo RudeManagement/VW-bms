@@ -8,7 +8,7 @@
 //Define this to be the serial port the Tesla BMS modules are connected to.
 //On the Due you need to use a USART port (Serial1, Serial2, Serial3) and update the call to serialSpecialInit if not Serial1
 //Serial3 for teensy
-#define SERIALBMS  Serial3
+//#define SERIALBMS  Serial3
 
 // victron serial VE direct bus config
 #define VE Serial2

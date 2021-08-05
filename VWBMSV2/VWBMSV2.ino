@@ -58,7 +58,8 @@ This version of SimpBMS has been modified as the Space Balls edition utilising t
 #include "BMSCan.h"
 
 #define CPU_REBOOT (_reboot_Teensyduino_());
-#define DEFAULT_CAN_INTERFACE_INDEX 1
+#define DEFAULT_CAN_INTERFACE_INDEX 0
+
 
 BMSModuleManager bms;
 SerialConsole console;
@@ -66,7 +67,7 @@ EEPROMSettings settings;
 
 
 /////Version Identifier/////////
-int firmver = 280410;
+int firmver = 280411;
 
 //Curent filter//
 float filterFrequency = 5.0 ;
@@ -74,8 +75,8 @@ FilterOnePole lowpassFilter( LOWPASS, filterFrequency );
 
 
 //Simple BMS V2 wiring//
-const int ACUR2 = A0; // current 1
-const int ACUR1 = A1; // current 2
+//const int ACUR2 = A0; // current 1
+//const int ACUR1 = A1; // current 2
 const int IN1 = 17; // input 1 - high active
 const int IN2 = 16; // input 2- high active
 const int IN3 = 18; // input 1 - high active
@@ -168,7 +169,6 @@ signed long voltage1, voltage2, voltage3 = 0; //mV only with ISAscale sensor
 //struct can_frame canMsg;
 //MCP2515 CAN1(10); //set CS pin for can controlelr
 
-
 //variables for current calulation
 int value;
 float currentact, RawCur;
@@ -206,6 +206,8 @@ int x = 0;
 int balancecells;
 int cellspresent = 0;
 int Charged = 0;
+int chargeOverride = 0;
+
 
 //VW BMS CAN variables////////////
 int controlid = 0x0BA;
@@ -228,6 +230,10 @@ int menuload = 0;
 int debugdigits = 2; //amount of digits behind decimal for voltage reading
 
 ADC *adc = new ADC(); // adc object
+
+bool chargeEnabled() {
+  return digitalRead(IN3) == HIGH || chargeOverride == 1;
+}
 
 void loadSettings()
 {
@@ -304,8 +310,8 @@ uint32_t lastUpdate;
 void setup()
 {
   delay(4000);  //just for easy debugging. It takes a few seconds for USB to come up properly on most OS's
-  pinMode(ACUR1, INPUT);
-  pinMode(ACUR2, INPUT);
+//  pinMode(ACUR1, INPUT);
+//  pinMode(ACUR2, INPUT);
   pinMode(IN1, INPUT);
   pinMode(IN2, INPUT);
   pinMode(IN3, INPUT);
@@ -333,11 +339,25 @@ void setup()
   analogWriteFrequency(OUT7, pwmfreq);
   analogWriteFrequency(OUT8, pwmfreq);
 
+  /// SCK on 14, CS 15, MOSI - 7, MISO - 8
+   Serial.print ("Using pin #") ;
+  Serial.print (MCP2515_SI) ;
+  Serial.print (" for MOSI: ") ;
+  Serial.println (SPI.pinIsMOSI (MCP2515_SI) ? "yes" : "NO!!!") ;
+  Serial.print ("Using pin #") ;
+  Serial.print (MCP2515_SO) ;
+  Serial.print (" for MISO: ") ;
+  Serial.println (SPI.pinIsMISO (MCP2515_SO) ? "yes" : "NO!!!") ;
+  Serial.print ("Using pin #") ;
+  Serial.print (MCP2515_SCK) ;
+  Serial.print (" for SCK: ") ;
+  Serial.println (SPI.pinIsSCK (MCP2515_SCK) ? "yes" : "NO!!!") ;
+ 
   SPI.setMOSI (MCP2515_SI) ;
   SPI.setMISO (MCP2515_SO) ;
   SPI.setSCK (MCP2515_SCK) ;
   SPI.begin () ;
-
+  
   #ifdef __MK66FX1M0__
   SPI1.setMOSI (MCP2515_SI_2) ;
   SPI1.setMISO (MCP2515_SO_2) ;
@@ -353,7 +373,7 @@ void setup()
   adc->adc0->setResolution(16); // set bits of resolution
   adc->adc0->setConversionSpeed(ADC_CONVERSION_SPEED::MED_SPEED);
   adc->adc0->setSamplingSpeed(ADC_SAMPLING_SPEED::MED_SPEED);
-  adc->adc0->startContinuous(ACUR1);
+  //adc->adc0->startContinuous(ACUR1);
 
 
   SERIALCONSOLE.begin(115200);
@@ -394,7 +414,7 @@ void setup()
                   WDOG_STCTRLH_STOPEN | WDOG_STCTRLH_CLKSRC;
   interrupts();
   /////////////////
-  SERIALBMS.begin(115200);
+ // SERIALBMS.begin(115200);
   //SERIALBMS.begin(612500); //Tesla serial bus
   //VE.begin(19200); //Victron VE direct bus
 #if defined (__arm__) && defined (__SAM3X8E__)
@@ -786,7 +806,7 @@ if (settings.ESSmode == 1)
           {
             balancecells = 0;
           }
-          if (digitalRead(IN3) == HIGH && (bms.getHighCellVolt() < (settings.ChargeVsetpoint - settings.ChargeHys))) //detect AC present for charging and check not balancing
+          if (chargeEnabled() && (bms.getHighCellVolt() < (settings.ChargeVsetpoint - settings.ChargeHys))) //detect AC present for charging and check not balancing
           {
             if (settings.ChargerDirect == 1)
             {
@@ -818,7 +838,7 @@ if (settings.ESSmode == 1)
           {
             bmsstatus = Ready;
           }
-          if (digitalRead(IN3) == HIGH && (bms.getHighCellVolt() < (settings.ChargeVsetpoint - settings.ChargeHys))) //detect AC present for charging and check not balancing
+          if (chargeEnabled() && (bms.getHighCellVolt() < (settings.ChargeVsetpoint - settings.ChargeHys))) //detect AC present for charging and check not balancing
           {
             bmsstatus = Charge;
           }
@@ -850,7 +870,7 @@ if (settings.ESSmode == 1)
             digitalWrite(OUT3, LOW);//turn off charger
             bmsstatus = Ready;
           }
-          if (digitalRead(IN3) == LOW)//detect AC not present for charging
+          if (!chargeEnabled())//detect AC not present for charging
           {
             //send a 0 amp request to outlander
             chargecurrent = 0;
@@ -1223,7 +1243,7 @@ void printbmsstat()
     }
   }
   SERIALCONSOLE.print("  ");
-  if (digitalRead(IN3) == HIGH)
+  if (chargeEnabled())
   {
     SERIALCONSOLE.print("| AC Present |");
   }
@@ -1293,18 +1313,18 @@ void getcurrent()
       if (currentact < settings.changecur && currentact > (settings.changecur * -1))
       {
         sensor = 1;
-        adc->startContinuous(ACUR1);
+//        adc->startContinuous(ACUR1);
       }
       else
       {
         sensor = 2;
-        adc->adc0->startContinuous(ACUR2);
+//        adc->adc0->startContinuous(ACUR2);
       }
     }
     else
     {
       sensor = 1;
-      adc->adc0->startContinuous(ACUR1);
+//      adc->adc0->startContinuous(ACUR1);
     }
     if (sensor == 1)
     {
@@ -1662,7 +1682,7 @@ void contcon()
 
 void calcur()
 {
-  adc->adc0->startContinuous(ACUR1);
+//  adc->adc0->startContinuous(ACUR1);
   sensor = 1;
   x = 0;
   SERIALCONSOLE.print(" Calibrating Current Offset ::::: ");
@@ -1678,7 +1698,7 @@ void calcur()
   SERIALCONSOLE.print(" current offset 1 calibrated ");
   SERIALCONSOLE.println("  ");
   x = 0;
-  adc->adc0->startContinuous(ACUR2);
+//  adc->adc0->startContinuous(ACUR2);
   sensor = 2;
   SERIALCONSOLE.print(" Calibrating Current Offset ::::: ");
   while (x < 20)
@@ -2312,6 +2332,8 @@ void menu()
           #endif
           if (settings.chargerCanIndex > 3) {
             settings.chargerCanIndex = 0;
+          } else if (settings.chargerCanIndex < 0) {
+            settings.chargerCanIndex = 0;
           }
           bmscan.begin(500000, settings.chargerCanIndex);
           menuload = 1;
@@ -2330,6 +2352,18 @@ void menu()
             settings.veCanIndex = 0;
           }
           bmscan.begin(500000, settings.veCanIndex);
+          menuload = 1;
+          incomingByte = 'e';
+        }
+        break;
+        case 'o':
+        if (Serial.available() > 0)
+        {
+          if (chargeOverride == 0) {
+            chargeOverride = 1;
+          } else {
+            chargeOverride = 0;
+          }
           menuload = 1;
           incomingByte = 'e';
         }
@@ -2803,10 +2837,19 @@ void menu()
         SERIALCONSOLE.print(settings.chargecurrentcold * 0.1);
         SERIALCONSOLE.println("A");
 
+        SERIALCONSOLE.print("o - Override AC present: ");
+        if (chargeOverride == true) {
+          SERIALCONSOLE.print("ON");
+        } else {
+          SERIALCONSOLE.print("OFF");
+        }
+        SERIALCONSOLE.println();
         SERIALCONSOLE.println("q - Go back to menu");
         menuload = 6;
         break;
-
+        
+        SERIALCONSOLE.println();
+        
       case 'a': //Alarm and Warning settings
         while (Serial.available()) {
           Serial.read();
