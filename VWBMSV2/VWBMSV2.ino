@@ -58,7 +58,7 @@ This version of SimpBMS has been modified as the Space Balls edition utilising t
 #include "BMSCan.h"
 
 #define CPU_REBOOT (_reboot_Teensyduino_());
-#define DEFAULT_CAN_INTERFACE_INDEX 0
+#define DEFAULT_CAN_INTERFACE_INDEX 3
 
 
 BMSModuleManager bms;
@@ -130,6 +130,9 @@ byte bmsstatus = 0;
 //
 int outlander_charger_reported_voltage = 0;
 int outlander_charger_reported_current = 0;
+int outlander_charger_reported_temp1 = 0;
+int outlander_charger_reported_temp2 = 0;
+byte outlander_charger_reported_status = 0;
 
 int Discharge;
 int ErrorReason = 0;
@@ -1301,6 +1304,27 @@ void printbmsstat()
   SERIALCONSOLE.print(digitalRead(IN2));
   SERIALCONSOLE.print(digitalRead(IN3));
   SERIALCONSOLE.print(digitalRead(IN4));
+
+  if (bmsstatus == Charge && settings.chargertype == Outlander) {
+    SERIALCONSOLE.println();
+    SERIALCONSOLE.print("Outlander Charger - Reported Voltage: ");
+    SERIALCONSOLE.print(outlander_charger_reported_voltage);
+    SERIALCONSOLE.print("V Reported Current: ");
+    SERIALCONSOLE.print(outlander_charger_reported_current / 10);
+    SERIALCONSOLE.print("A Reported Temp1: ");
+    SERIALCONSOLE.print(outlander_charger_reported_temp1);
+    SERIALCONSOLE.print("C Reported Temp2: ");
+    SERIALCONSOLE.print(outlander_charger_reported_temp2);
+    SERIALCONSOLE.print("C status: ");
+    if (outlander_charger_reported_status == 0) {
+          SERIALCONSOLE.print("Not Charging");
+      } else if (outlander_charger_reported_status == 0x04) {
+          SERIALCONSOLE.print("Wait for Mains");
+      } else if (outlander_charger_reported_status == 0x08) {
+          SERIALCONSOLE.print("Ready/Charging");
+      }
+    SERIALCONSOLE.println();
+  }
 }
 
 
@@ -2733,7 +2757,7 @@ void menu()
           SERIALCONSOLE.print("3 - Pack Max Charge Current: ");
           SERIALCONSOLE.print(settings.chargecurrentmax * 0.1);
           SERIALCONSOLE.println("A");
-          SERIALCONSOLE.print("4- Pack End of Charge Current: ");
+          SERIALCONSOLE.print("4 - Pack End of Charge Current: ");
           SERIALCONSOLE.print(settings.chargecurrentend * 0.1);
           SERIALCONSOLE.println("A");
         }
@@ -2772,7 +2796,7 @@ void menu()
         SERIALCONSOLE.println();
         if (settings.chargertype > 0)
         {
-          SERIALCONSOLE.print("6- Charger Can Msg Spd: ");
+          SERIALCONSOLE.print("6 - Charger Can Msg Spd: ");
           SERIALCONSOLE.print(settings.chargerspd);
           SERIALCONSOLE.println("mS");
           SERIALCONSOLE.println();
@@ -3278,8 +3302,19 @@ void canread(int canInterfaceOffset, int idOffset)
 
   if (settings.chargerCanIndex == canInterfaceOffset && settings.chargertype == Outlander) {
     if (inMsg.id == 0x389) {
-      outlander_charger_reported_voltage = rxBuf[0] * 2;
-      outlander_charger_reported_current = rxBuf[3];
+      outlander_charger_reported_voltage = inMsg.buf[0] * 2;
+      outlander_charger_reported_current = inMsg.buf[2];
+      outlander_charger_reported_temp1 = inMsg.buf[3] - 40;
+      outlander_charger_reported_temp2 = inMsg.buf[4] - 40;
+
+    } else if (inMsg.id == 0x38A) {
+       outlander_charger_reported_status = inMsg.buf[4];
+    }
+  }
+
+  if (settings.veCanIndex == canInterfaceOffset) {
+    if (inMsg.id == 0x01) {
+      
     }
   }
 
@@ -3302,7 +3337,8 @@ void canread(int canInterfaceOffset, int idOffset)
         Serial.print(msgString);
       }
     }
-
+    Serial.print("Can Interface: ");
+    Serial.print(canInterfaceOffset);
     Serial.println();
   }
 }
@@ -3650,10 +3686,10 @@ void dashupdate()
     switch (bmsstatus)
     {
       case (Boot):
-        Serial2.print(" Active ");
+        Serial2.print("Active");
         break;
       case (Error):
-        Serial2.print(" Error ");
+        Serial2.print("Error");
         break;
     }
   }
@@ -3662,27 +3698,27 @@ void dashupdate()
     switch (bmsstatus)
     {
       case (Boot):
-        Serial2.print(" Boot ");
+        Serial2.print("Boot");
         break;
 
       case (Ready):
-        Serial2.print(" Ready ");
+        Serial2.print("Ready");
         break;
 
       case (Precharge):
-        Serial2.print(" Precharge ");
+        Serial2.print("Precharge");
         break;
 
       case (Drive):
-        Serial2.print(" Drive ");
+        Serial2.print("Drive");
         break;
 
       case (Charge):
-        Serial2.print(" Charge ");
+        Serial2.print("Charge");
         break;
 
       case (Error):
-        Serial2.print(" Error ");
+        Serial2.print("Error");
         break;
     }
   }
@@ -3740,11 +3776,68 @@ void dashupdate()
   Serial2.write(0xff);  // We always have to send this three lines after each command sent to the nextion display.
   Serial2.write(0xff);
   Serial2.write(0xff);
+  Serial2.print("ac.val=");
+  Serial2.print(chargeEnabled());
+  Serial2.write(0xff);  // We always have to send this three lines after each command sent to the nextion display.
+  Serial2.write(0xff);
+  Serial2.write(0xff);
   Serial2.print("celldelta.val=");
   Serial2.print((bms.getHighCellVolt() - bms.getLowCellVolt()) * 1000, 0);
   Serial2.write(0xff);  // We always have to send this three lines after each command sent to the nextion display.
   Serial2.write(0xff);
   Serial2.write(0xff);
+  Serial2.print("chargevsetpoint.val=");
+  Serial2.print(settings.ChargeVsetpoint * 1000);
+  Serial2.write(0xff);  // We always have to send this three lines after each command sent to the nextion display.
+  Serial2.write(0xff);
+  Serial2.write(0xff);
+  Serial2.print("chargecurrentmax.val=");
+  Serial2.print(settings.chargecurrentmax / 10);
+  Serial2.write(0xff);  // We always have to send this three lines after each command sent to the nextion display.
+  Serial2.write(0xff);
+  Serial2.write(0xff);
+  
+  if(bmsstatus == Charge) {
+    Serial2.print("requestedchargecurrent.val=");
+    Serial2.print(chargecurrent);
+    Serial2.write(0xff);  // We always have to send this three lines after each command sent to the nextion display.
+    Serial2.write(0xff);
+    Serial2.write(0xff);
+
+    if(settings.chargertype == Outlander) {
+      Serial2.print("chargercurrent.val=");
+      Serial2.print(outlander_charger_reported_current);
+      Serial2.write(0xff);  // We always have to send this three lines after each command sent to the nextion display.
+      Serial2.write(0xff);
+      Serial2.write(0xff);
+
+      Serial2.print("chargervolts.val=");
+      Serial2.print(outlander_charger_reported_voltage);
+      Serial2.write(0xff);  // We always have to send this three lines after each command sent to the nextion display.
+      Serial2.write(0xff);
+      Serial2.write(0xff);
+
+      Serial2.print("chargertemp.val=");
+      Serial2.print(outlander_charger_reported_temp2);
+      Serial2.write(0xff);  // We always have to send this three lines after each command sent to the nextion display.
+      Serial2.write(0xff);
+      Serial2.write(0xff);   
+
+      Serial2.print("chargerstatus.val=");
+      if (outlander_charger_reported_status == 0) {
+          Serial2.print("Not Charging");
+      } else if (outlander_charger_reported_status == 0x04) {
+          Serial2.print("Wait for Mains");
+      } else if (outlander_charger_reported_status == 0x08) {
+          Serial2.print("Ready/Charging");
+      }
+      Serial2.write(0xff);  // We always have to send this three lines after each command sent to the nextion display.
+      Serial2.write(0xff);
+      Serial2.write(0xff);  
+    }
+  }
+
+  
   Serial2.write(0xff);
   /*
     Serial2.print("cellbal.val=");
@@ -3753,109 +3846,32 @@ void dashupdate()
     Serial2.write(0xff);
     Serial2.write(0xff);
   */
-}
-
-
-void Serialexp()
-{
-  /*
-    incomingByte = SERIALBMS.read(); // read the incoming byte:
-    Serial.println();
-    Serial.print(incomingByte);
-    Serial.print("|");
-
-    incomingByte = SERIALBMS.read(); // read the incoming byte:
-    if (incomingByte == 0xFF)
-    {
-    Serial.println();
-    Serial.print(incomingByte);
-    incomingByte = SERIALBMS.read(); // read the incoming byte:
-    Serial.print("|");
-    Serial.print(incomingByte);
-    Serial.print("|");
-    Serial.print(incomingByte);
-    if (settings.Serialexp == 1) //Do Serial Master Things
-    {
-    Serial.print(SERIALBMS.read(), HEX);
-    Serial.print("|");
-    Serial.print(SERIALBMS.read(), HEX);
-    }
-    if (settings.Serialexp == 2) //Do Serial Slave Things
-    {
-    switch (incomingByte)
-    {
-    case 0x00: //q to go back to main menu
-    if (SerialID == 0)
-    {
-      SerialID = SERIALBMS.read();
-      SERIALBMS.write(0x01); //response is 1 higher than sent id
-      SERIALBMS.write(SerialID);
-
-      Serial.print("New ID : ");
-      Serial.print(SerialID);
-    }
-    else
-    {
-      SERIALBMS.write(0xFF);
-      SERIALBMS.write(0x00);
-      SERIALBMS.write(SERIALBMS.read());
-    }
-    break;
-    }
-    }
-    }
-  */
-}
-
-void SerialReqData()
-{
-  /*
-    SERIALBMS.write(0x12);
-  */
-}
-
-void Serialslaveinit()
-{
-  /*
-    int buff[8];
-    while (1 == 1)
-    {
-    for (int I = 1; I < 51; I++)
-    {
-      SERIALBMS.write(0xFF);
-      SERIALBMS.write(0x00);
-      SERIALBMS.write(I);
-      Serial.write(" | ");
-      delay(2);
-      if (SERIALBMS.available() > 0)
-      {
-        for (int x = 0; x < 4; x++)
+  if (Serial2.available() > 0) {
+    //needs improvement but works for now
+    char inByte = Serial2.read();
+    if (inByte == 'a') {
+      chargeOverride = 1;
+    } else if (inByte == 'o') {
+      chargeOverride = 0;
+    } else if (inByte == 'v') {
+      if (Serial2.available() > 0)
         {
-          buff[x] = SERIALBMS.read();
-          Serial.write(buff[0]);
-          Serial.write(buff[1]);
-          Serial.write(buff[2]);
+          settings.ChargeVsetpoint = Serial2.parseInt();
+          settings.ChargeVsetpoint = settings.ChargeVsetpoint / 1000;
         }
-        if (buff[0] = 0xFF)
+    } else if (inByte == 'c') {
+      if (Serial2.available() > 0)
         {
-          if (buff[1] == I)
-          {
-            break;
-          }
+          settings.chargecurrentmax = Serial2.parseInt();
+          settings.chargecurrentmax = settings.chargecurrentmax * 10;
         }
-      }
-      else
-      {
-        Serial.write("No Serial Slaves Found");
-        break;
-      }
+    } else if (inByte == 's') {
+      EEPROM.put(0, settings); //save all change to eeprom
+    }
+    
+  }
 
-    }
-    break;
-    }
-  */
 }
-
 
 void chargercomms()
 {
