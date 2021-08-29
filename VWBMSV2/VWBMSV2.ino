@@ -177,6 +177,8 @@ int value;
 float currentact, RawCur;
 float ampsecond;
 unsigned long lasttime;
+unsigned long inverterLastRec;
+byte inverterStatus;
 unsigned long looptime, looptime1, UnderTime, cleartime, chargertimer = 0; //ms
 int currentsense = 14;
 int sensor = 1;
@@ -236,6 +238,15 @@ ADC *adc = new ADC(); // adc object
 
 bool chargeEnabled() {
   return digitalRead(IN3) == HIGH || chargeOverride == 1;
+}
+
+bool inverterControlledContactorsStatus() {
+  // if inverter in RUN mode
+  if (inverterStatus == 0x01) {
+    return true;
+  }
+
+  return false;
 }
 
 void loadSettings()
@@ -367,16 +378,6 @@ void setup()
   SPI1.setSCK (MCP2515_SCK_2) ;
   SPI1.begin () ;
   #endif
-
-
-  //if using enable pins on a transceiver they need to be set on
-
-
-  adc->adc0->setAveraging(16); // set number of averages
-  adc->adc0->setResolution(16); // set bits of resolution
-  adc->adc0->setConversionSpeed(ADC_CONVERSION_SPEED::MED_SPEED);
-  adc->adc0->setSamplingSpeed(ADC_SAMPLING_SPEED::MED_SPEED);
-  //adc->adc0->startContinuous(ACUR1);
 
 
   SERIALCONSOLE.begin(115200);
@@ -517,270 +518,6 @@ void loop()
   if (outputcheck != 1)
   {
     contcon();
-if (settings.ESSmode == 1)
-    {
-      if (bmsstatus != Error && bmsstatus != Boot)
-      {
-        contctrl = contctrl | 4; //turn on negative contactor
-
-        if (settings.tripcont != 0)
-        {
-          if (bms.getLowCellVolt() > settings.UnderVSetpoint && bms.getHighCellVolt() < settings.OverVSetpoint)
-          {
-            if (digitalRead(OUT2) == LOW && digitalRead(OUT4) == LOW)
-            {
-              mainconttimer = millis();
-              digitalWrite(OUT4, HIGH);//Precharge start
-              Serial.println();
-              Serial.println("Precharge!!!");
-              Serial.println(mainconttimer);
-              Serial.println();
-            }
-            if (mainconttimer + settings.Pretime < millis() && digitalRead(OUT2) == LOW && abs(currentact) < settings.Precurrent)
-            {
-              digitalWrite(OUT2, HIGH);//turn on contactor
-              contctrl = contctrl | 2; //turn on contactor
-              Serial.println();
-              Serial.println("Main On!!!");
-              Serial.println();
-              mainconttimer = millis() + settings.Pretime;
-            }
-            if (mainconttimer + settings.Pretime + 1000 < millis() )
-            {
-              digitalWrite(OUT4, LOW);//ensure precharge is low
-            }
-          }
-          else
-          {
-            digitalWrite(OUT4, LOW);//ensure precharge is low
-            mainconttimer = 0;
-          }
-        }
-        if (digitalRead(IN1) == LOW)//Key OFF
-        {
-          if (storagemode == 1)
-          {
-            storagemode = 0;
-          }
-        }
-        else
-        {
-          if (storagemode == 0)
-          {
-            storagemode = 1;
-          }
-        }
-        if (bms.getHighCellVolt() > settings.balanceVoltage && bms.getHighCellVolt() > bms.getLowCellVolt() + settings.balanceHyst)
-        {
-          balancecells = 1;
-        }
-        else
-        {
-          balancecells = 0;
-        }
-
-        //Pretimer + settings.Pretime > millis();
-
-        if (storagemode == 1)
-        {
-          if (bms.getHighCellVolt() > settings.StoreVsetpoint)
-          {
-            digitalWrite(OUT3, LOW);//turn off charger
-            // contctrl = contctrl & 253;
-            // Pretimer = millis();
-            Charged = 1;
-            SOCcharged(2);
-          }
-          else
-          {
-            if (Charged == 1)
-            {
-              if (bms.getHighCellVolt() < (settings.StoreVsetpoint - settings.ChargeHys))
-              {
-                Charged = 0;
-                digitalWrite(OUT3, HIGH);//turn on charger
-                /*
-                  if (Pretimer + settings.Pretime < millis())
-                  {
-                  contctrl = contctrl | 2;
-                  Pretimer = 0;
-                  }
-                */
-              }
-            }
-            else
-            {
-              digitalWrite(OUT3, HIGH);//turn on charger
-              /*
-                if (Pretimer + settings.Pretime < millis())
-                {
-                contctrl = contctrl | 2;
-                Pretimer = 0;
-                }
-              */
-            }
-          }
-        }
-        else
-        {
-          if (bms.getHighCellVolt() > settings.OverVSetpoint || bms.getHighCellVolt() > settings.ChargeVsetpoint)
-          {
-            if ((millis() - overtriptimer) > settings.triptime)
-            {
-              if (digitalRead(OUT3) == 1)
-              {
-                Serial.println();
-                Serial.println("Over Voltage Trip");
-                digitalWrite(OUT3, LOW);//turn off charger
-                // contctrl = contctrl & 253;
-                //Pretimer = millis();
-                Charged = 1;
-                SOCcharged(2);
-              }
-
-            }
-          }
-          else
-          {
-            overtriptimer = millis();
-            if (Charged == 1)
-            {
-
-              if (bms.getHighCellVolt() < (settings.ChargeVsetpoint - settings.ChargeHys))
-              {
-                if (digitalRead(OUT3) == 0)
-                {
-                  Serial.println();
-                  Serial.println("Reset Over Voltage Trip Not Charged");
-                  Charged = 0;
-                  digitalWrite(OUT3, HIGH);//turn on charger
-                }
-                /*
-                  if (Pretimer + settings.Pretime < millis())
-                  {
-                  // Serial.println();
-                  //Serial.print(Pretimer);
-                  contctrl = contctrl | 2;
-                  }*/
-              }
-
-            }
-            else
-            {
-              if (digitalRead(OUT3) == 0)
-              {
-                Serial.println();
-                Serial.println("Reset Over Voltage Trip Not Charged");
-                digitalWrite(OUT3, HIGH);//turn on charger
-              }
-              /*
-                if (Pretimer + settings.Pretime < millis())
-                {
-                // Serial.println();
-                //Serial.print(Pretimer);
-                contctrl = contctrl | 2;
-                }*/
-            }
-          }
-        }
-
-        if (bms.getLowCellVolt() < settings.UnderVSetpoint || bms.getLowCellVolt() < settings.DischVsetpoint)
-        {
-          if (digitalRead(OUT1) == 1)
-          {
-
-            if ((millis() - undertriptimer) > settings.triptime)
-            {
-              Serial.println();
-              Serial.println("Under Voltage Trip");
-              digitalWrite(OUT1, LOW);//turn off discharge
-              // contctrl = contctrl & 254;
-              // Pretimer1 = millis();
-            }
-          }
-        }
-        else
-        {
-          undertriptimer = millis();
-
-          if (bms.getLowCellVolt() > settings.DischVsetpoint + settings.DischHys)
-          {
-            if (digitalRead(OUT1) == 0)
-            {
-              Serial.println();
-              Serial.println("Reset Under Voltage Trip");
-              digitalWrite(OUT1, HIGH);//turn on discharge
-            }
-            /*
-              if (Pretimer1 + settings.Pretime < millis())
-              {
-              contctrl = contctrl | 1;
-              }*/
-          }
-        }
-
-        if (SOCset == 1)
-        {
-          if (settings.tripcont == 0)
-          {
-            if (bms.getLowCellVolt() < settings.UnderVSetpoint || bms.getHighCellVolt() > settings.OverVSetpoint || bms.getHighTemperature() > settings.OverTSetpoint)
-            {
-              digitalWrite(OUT2, HIGH);//trip breaker
-              bmsstatus = Error;
-            }
-            else
-            {
-              digitalWrite(OUT2, LOW);//trip breaker
-            }
-          }
-          else
-          {
-            if (bms.getLowCellVolt() < settings.UnderVSetpoint || bms.getHighCellVolt() > settings.OverVSetpoint || bms.getHighTemperature() > settings.OverTSetpoint)
-            {
-              digitalWrite(OUT2, LOW);//turn off contactor
-              contctrl = contctrl & 253; //turn off contactor
-              digitalWrite(OUT4, LOW);//ensure precharge is low
-              bmsstatus = Error;
-            }
-          }
-        }
-      }
-      else
-      {
-        //digitalWrite(OUT2, HIGH);//trip breaker
-        Discharge = 0;
-        digitalWrite(OUT4, LOW);
-        digitalWrite(OUT3, LOW);//turn off charger
-        digitalWrite(OUT2, LOW);
-        digitalWrite(OUT1, LOW);//turn off discharge
-        contctrl = 0; //turn off out 5 and 6
-
-        if (SOCset == 1)
-        {
-          if (settings.tripcont == 0)
-          {
-
-            digitalWrite(OUT2, HIGH);//trip breaker
-          }
-          else
-          {
-            digitalWrite(OUT2, LOW);//turn off contactor
-            digitalWrite(OUT4, LOW);//ensure precharge is low
-          }
-
-          if (bms.getLowCellVolt() > settings.UnderVSetpoint && bms.getHighCellVolt() < settings.OverVSetpoint && bms.getHighTemperature() < settings.OverTSetpoint && cellspresent == bms.seriescells() && cellspresent == (settings.Scells * settings.Pstrings))
-          {
-            if (ErrorReason == 0)
-            {
-              bmsstatus = Ready;
-            }
-          }
-        }
-      }
-      //pwmcomms();
-    }
-    else
-    {
       switch (bmsstatus)
       {
         case (Boot):
@@ -809,7 +546,7 @@ if (settings.ESSmode == 1)
           {
             balancecells = 0;
           }
-          if (chargeEnabled() && (bms.getHighCellVolt() < (settings.ChargeVsetpoint - settings.ChargeHys))) //detect AC present for charging and check not balancing
+          if (chargeEnabled() && inverterControlledContactorsStatus() && (bms.getHighCellVolt() < (settings.ChargeVsetpoint - settings.ChargeHys))) //detect AC present for charging and check not balancing
           {
             if (settings.ChargerDirect == 1)
             {
@@ -873,7 +610,7 @@ if (settings.ESSmode == 1)
             digitalWrite(OUT3, LOW);//turn off charger
             bmsstatus = Ready;
           }
-          if (!chargeEnabled())//detect AC not present for charging
+          if (!chargeEnabled() || !inverterControlledContactorsStatus())//detect AC not present for charging or inverter not closed the contactors
           {
             //send a 0 amp request to outlander
             chargecurrent = 0;
@@ -908,7 +645,7 @@ if (settings.ESSmode == 1)
 
           break;
       }
-    }
+    
     if ( settings.cursens == Analoguedual || settings.cursens == Analoguesing)
     {
       getcurrent();
@@ -920,48 +657,29 @@ if (settings.ESSmode == 1)
     }
   }
 
+  if(inverterLastRec + 200 < millis()) {
+    inverterStatus = 0;
+  }
+
   if (millis() - looptime > 500)
   {
     looptime = millis();
     bms.getAllVoltTemp();
-    //UV  check
-    if (settings.ESSmode == 1)
+
+    if (bms.getLowCellVolt() < settings.UnderVSetpoint || bms.getHighCellVolt() < settings.UnderVSetpoint)
     {
-      if (SOCset != 0)
+      if (UnderTime > millis()) //check is last time not undervoltage is longer thatn UnderDur ago
       {
-        if (bms.getLowCellVolt() < settings.UnderVSetpoint || bms.getHighCellVolt() < settings.UnderVSetpoint)
-        {
-          if (debug != 0)
-          {
-            SERIALCONSOLE.println("  ");
-            SERIALCONSOLE.print("   !!! Undervoltage Fault !!!");
-            SERIALCONSOLE.println("  ");
-          }
-          bmsstatus = Error;
-          ErrorReason = ErrorReason | 0x01;
-        }
-        else
-        {
-          ErrorReason = ErrorReason & ~0x01;
-        }
+        bmsstatus = Error;
+        ErrorReason = ErrorReason | 0x02;
       }
     }
-    else //In 'vehicle' mode
+    else
     {
-      if (bms.getLowCellVolt() < settings.UnderVSetpoint || bms.getHighCellVolt() < settings.UnderVSetpoint)
-      {
-        if (UnderTime > millis()) //check is last time not undervoltage is longer thatn UnderDur ago
-        {
-          bmsstatus = Error;
-          ErrorReason = ErrorReason | 0x02;
-        }
-      }
-      else
-      {
-        UnderTime = millis() + settings.UnderDur;
-        ErrorReason = ErrorReason & ~0x02;
-      }
+      UnderTime = millis() + settings.UnderDur;
+      ErrorReason = ErrorReason & ~0x02;
     }
+    
 
     if (debug != 0)
     {
@@ -1869,89 +1587,6 @@ void VEcan() //communication with Victron system over CAN
   msg.buf[7] = 0x00;
   bmscan.write(msg, settings.veCanIndex);
 
-}
-
-void BMVmessage()//communication with the Victron Color Control System over VEdirect
-{
-  lasttime = millis();
-  x = 0;
-  VE.write(13);
-  VE.write(10);
-  VE.write(myStrings[0]);
-  VE.write(9);
-  VE.print(bms.getPackVoltage() * 1000, 0);
-  VE.write(13);
-  VE.write(10);
-  VE.write(myStrings[2]);
-  VE.write(9);
-  VE.print(currentact);
-  VE.write(13);
-  VE.write(10);
-  VE.write(myStrings[4]);
-  VE.write(9);
-  VE.print(ampsecond * 0.27777777777778, 0); //consumed ah
-  VE.write(13);
-  VE.write(10);
-  VE.write(myStrings[6]);
-  VE.write(9);
-  VE.print(SOC * 10); //SOC
-  x = 8;
-  while (x < 20)
-  {
-    VE.write(13);
-    VE.write(10);
-    VE.write(myStrings[x]);
-    x ++;
-    VE.write(9);
-    VE.write(myStrings[x]);
-    x ++;
-  }
-  VE.write(13);
-  VE.write(10);
-  VE.write("Checksum");
-  VE.write(9);
-  VE.write(0x50); //0x59
-  delay(10);
-
-  while (x < 44)
-  {
-    VE.write(13);
-    VE.write(10);
-    VE.write(myStrings[x]);
-    x ++;
-    VE.write(9);
-    VE.write(myStrings[x]);
-    x ++;
-  }
-  /*
-    VE.write(13);
-    VE.write(10);
-    VE.write(myStrings[32]);
-    VE.write(9);
-    VE.print(bms.getLowVoltage()*1000,0);
-    VE.write(13);
-    VE.write(10);
-    VE.write(myStrings[34]);
-    VE.write(9);
-    VE.print(bms.getHighVoltage()*1000,0);
-    x=36;
-
-    while(x < 43)
-    {
-     VE.write(13);
-     VE.write(10);
-     VE.write(myStrings[x]);
-     x ++;
-     VE.write(9);
-     VE.write(myStrings[x]);
-     x ++;
-    }
-  */
-  VE.write(13);
-  VE.write(10);
-  VE.write("Checksum");
-  VE.write(9);
-  VE.write(231);
 }
 
 // Settings menu
@@ -3313,8 +2948,10 @@ void canread(int canInterfaceOffset, int idOffset)
   }
 
   if (settings.veCanIndex == canInterfaceOffset) {
-    if (inMsg.id == 0x01) {
-      
+    //from inverter
+    if (inMsg.id == 0x02) {
+      inverterLastRec = millis();
+      inverterStatus = inMsg.buf[0];
     }
   }
 
@@ -3796,7 +3433,11 @@ void dashupdate()
   Serial2.write(0xff);  // We always have to send this three lines after each command sent to the nextion display.
   Serial2.write(0xff);
   Serial2.write(0xff);
-  
+    Serial2.print("inverterstatus.val=");
+  Serial2.print(inverterStatus);
+  Serial2.write(0xff); 
+  Serial2.write(0xff);
+  Serial2.write(0xff);
   if(bmsstatus == Charge) {
     Serial2.print("requestedchargecurrent.val=");
     Serial2.print(chargecurrent);
