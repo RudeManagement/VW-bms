@@ -192,6 +192,7 @@ int NextRunningAverage;
 int SOC = 100; //State of Charge
 int SOCset = 0;
 int SOCtest = 0;
+int SOCoverride = -1;
 
 ///charger variables
 int maxac1 = 16; //Shore power 16A per charger
@@ -1481,12 +1482,22 @@ void VEcan() //communication with Victron system over CAN
 
   msg.id  = 0x355;
   msg.len = 8;
-  msg.buf[0] = lowByte(SOC);
-  msg.buf[1] = highByte(SOC);
-  msg.buf[2] = lowByte(SOH);
-  msg.buf[3] = highByte(SOH);
-  msg.buf[4] = lowByte(SOC * 10);
-  msg.buf[5] = highByte(SOC * 10);
+  if (SOCoverride != -1) {
+    msg.buf[0] = lowByte(SOCoverride);
+    msg.buf[1] = highByte(SOCoverride);
+    msg.buf[2] = lowByte(SOH);
+    msg.buf[3] = highByte(SOH);
+    msg.buf[4] = lowByte(SOCoverride * 10);
+    msg.buf[5] = highByte(SOCoverride * 10);
+  } else {
+    msg.buf[0] = lowByte(SOC);
+    msg.buf[1] = highByte(SOC);
+    msg.buf[2] = lowByte(SOH);
+    msg.buf[3] = highByte(SOH);
+    msg.buf[4] = lowByte(SOC * 10);
+    msg.buf[5] = highByte(SOC * 10);
+  }
+
   msg.buf[6] = lowByte(bmsstatus);
   msg.buf[7] = highByte(bmsstatus);
   bmscan.write(msg, settings.veCanIndex);
@@ -3364,10 +3375,14 @@ void dashupdate()
   Serial2.write(0xff);
   Serial2.write(0xff);
   Serial2.print("soc.val=");
-  Serial2.print(SOC);
+  if (SOCoverride != -1) {
+    Serial2.print(SOCoverride);
+  } else {
+    Serial2.print(SOC);
+  }
   Serial2.write(0xff);  // We always have to send this three lines after each command sent to the nextion display.
   Serial2.write(0xff);
-  Serial2.write(0xff);
+  Serial2.write(0xff); 
   Serial2.print("soc1.val=");
   Serial2.print(SOC);
   Serial2.write(0xff);  // We always have to send this three lines after each command sent to the nextion display.
@@ -3433,8 +3448,13 @@ void dashupdate()
   Serial2.write(0xff);  // We always have to send this three lines after each command sent to the nextion display.
   Serial2.write(0xff);
   Serial2.write(0xff);
-    Serial2.print("inverterstatus.val=");
+  Serial2.print("inverterstatus.val=");
   Serial2.print(inverterStatus);
+  Serial2.write(0xff); 
+  Serial2.write(0xff);
+  Serial2.write(0xff);
+  Serial2.print("socOverride.val=");
+  Serial2.print(SOCoverride);
   Serial2.write(0xff); 
   Serial2.write(0xff);
   Serial2.write(0xff);
@@ -3508,6 +3528,8 @@ void dashupdate()
         }
     } else if (inByte == 's') {
       EEPROM.put(0, settings); //save all change to eeprom
+    } else if (inByte == 'q') {
+      SOCoverride = Serial2.parseInt();
     }
     
   }
