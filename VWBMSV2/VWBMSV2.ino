@@ -1458,6 +1458,7 @@ void VEcan() //communication with Victron system over CAN
     msg.buf[5] = highByte(SOC * 10);
   }
 
+  //Send Charge if in Precharge for VCU
   if (bmsstatus == Precharge) {
      msg.buf[6] = lowByte(Charge);
      msg.buf[7] = highByte(Charge);
