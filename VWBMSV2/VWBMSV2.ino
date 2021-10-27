@@ -133,6 +133,7 @@ int outlander_charger_reported_current = 0;
 int outlander_charger_reported_temp1 = 0;
 int outlander_charger_reported_temp2 = 0;
 byte outlander_charger_reported_status = 0;
+byte evse_duty = 0;
 
 int Discharge;
 int ErrorReason = 0;
@@ -192,6 +193,7 @@ int NextRunningAverage;
 int SOC = 100; //State of Charge
 int SOCset = 0;
 int SOCtest = 0;
+int SOCoverride = -1;
 
 ///charger variables
 int maxac1 = 16; //Shore power 16A per charger
@@ -546,16 +548,15 @@ void loop()
           {
             balancecells = 0;
           }
-          if (chargeEnabled() && inverterControlledContactorsStatus() && (bms.getHighCellVolt() < (settings.ChargeVsetpoint - settings.ChargeHys))) //detect AC present for charging and check not balancing
+          if (chargeEnabled() && (bms.getHighCellVolt() < (settings.ChargeVsetpoint - settings.ChargeHys))) //detect AC present for charging and check not balancing
           {
-            if (settings.ChargerDirect == 1)
+            if (inverterControlledContactorsStatus())
             {
               bmsstatus = Charge;
             }
             else
             {
               bmsstatus = Precharge;
-              Pretimer = millis();
             }
           }
           if (digitalRead(IN1) == HIGH) //detect Key ON
@@ -568,7 +569,9 @@ void loop()
 
         case (Precharge):
           Discharge = 0;
-          Prechargecon();
+          if (inverterControlledContactorsStatus() && chargeEnabled()) {
+             bmsstatus = Charge;
+          }
           break;
 
 
@@ -1286,48 +1289,6 @@ void SOCcharged(int y)
   }
 }
 
-void Prechargecon()
-{
-  if (digitalRead(IN1) == HIGH || digitalRead(IN3) == HIGH) //detect Key ON or AC present
-  {
-    digitalWrite(OUT4, HIGH);//Negative Contactor Close
-    contctrl = 2;
-    if (Pretimer +  settings.Pretime > millis() || currentact > settings.Precurrent)
-    {
-      digitalWrite(OUT2, HIGH);//precharge
-    }
-    else //close main contactor
-    {
-      digitalWrite(OUT1, HIGH);//Positive Contactor Close
-      contctrl = 3;
-      if (settings.ChargerDirect == 1)
-      {
-        bmsstatus = Drive;
-      }
-      else
-      {
-        if (digitalRead(IN3) == HIGH)
-        {
-          bmsstatus = Charge;
-        }
-        if (digitalRead(IN1) == HIGH)
-        {
-          bmsstatus = Drive;
-        }
-      }
-      digitalWrite(OUT2, LOW);
-    }
-  }
-  else
-  {
-    digitalWrite(OUT1, LOW);
-    digitalWrite(OUT2, LOW);
-    digitalWrite(OUT4, LOW);
-    bmsstatus = Ready;
-    contctrl = 0;
-  }
-}
-
 void contcon()
 {
   if (contctrl != contstat) //check for contactor request change
@@ -1481,14 +1442,30 @@ void VEcan() //communication with Victron system over CAN
 
   msg.id  = 0x355;
   msg.len = 8;
-  msg.buf[0] = lowByte(SOC);
-  msg.buf[1] = highByte(SOC);
-  msg.buf[2] = lowByte(SOH);
-  msg.buf[3] = highByte(SOH);
-  msg.buf[4] = lowByte(SOC * 10);
-  msg.buf[5] = highByte(SOC * 10);
-  msg.buf[6] = lowByte(bmsstatus);
-  msg.buf[7] = highByte(bmsstatus);
+  if (SOCoverride != -1) {
+    msg.buf[0] = lowByte(SOCoverride);
+    msg.buf[1] = highByte(SOCoverride);
+    msg.buf[2] = lowByte(SOH);
+    msg.buf[3] = highByte(SOH);
+    msg.buf[4] = lowByte(SOCoverride * 10);
+    msg.buf[5] = highByte(SOCoverride * 10);
+  } else {
+    msg.buf[0] = lowByte(SOC);
+    msg.buf[1] = highByte(SOC);
+    msg.buf[2] = lowByte(SOH);
+    msg.buf[3] = highByte(SOH);
+    msg.buf[4] = lowByte(SOC * 10);
+    msg.buf[5] = highByte(SOC * 10);
+  }
+
+  if (bmsstatus == Precharge) {
+     msg.buf[6] = lowByte(Charge);
+     msg.buf[7] = highByte(Charge);
+  } else {
+     msg.buf[6] = lowByte(bmsstatus);
+     msg.buf[7] = highByte(bmsstatus);
+  }
+
   bmscan.write(msg, settings.veCanIndex);
 
   msg.id  = 0x356;
@@ -2944,6 +2921,7 @@ void canread(int canInterfaceOffset, int idOffset)
 
     } else if (inMsg.id == 0x38A) {
        outlander_charger_reported_status = inMsg.buf[4];
+       evse_duty = inMsg.buf[3];
     }
   }
 
@@ -3364,10 +3342,14 @@ void dashupdate()
   Serial2.write(0xff);
   Serial2.write(0xff);
   Serial2.print("soc.val=");
-  Serial2.print(SOC);
+  if (SOCoverride != -1) {
+    Serial2.print(SOCoverride);
+  } else {
+    Serial2.print(SOC);
+  }
   Serial2.write(0xff);  // We always have to send this three lines after each command sent to the nextion display.
   Serial2.write(0xff);
-  Serial2.write(0xff);
+  Serial2.write(0xff); 
   Serial2.print("soc1.val=");
   Serial2.print(SOC);
   Serial2.write(0xff);  // We always have to send this three lines after each command sent to the nextion display.
@@ -3433,8 +3415,13 @@ void dashupdate()
   Serial2.write(0xff);  // We always have to send this three lines after each command sent to the nextion display.
   Serial2.write(0xff);
   Serial2.write(0xff);
-    Serial2.print("inverterstatus.val=");
+  Serial2.print("inverterstatus.val=");
   Serial2.print(inverterStatus);
+  Serial2.write(0xff); 
+  Serial2.write(0xff);
+  Serial2.write(0xff);
+  Serial2.print("socOverride.val=");
+  Serial2.print(SOCoverride);
   Serial2.write(0xff); 
   Serial2.write(0xff);
   Serial2.write(0xff);
@@ -3462,7 +3449,13 @@ void dashupdate()
       Serial2.print(outlander_charger_reported_temp2);
       Serial2.write(0xff);  // We always have to send this three lines after each command sent to the nextion display.
       Serial2.write(0xff);
-      Serial2.write(0xff);   
+      Serial2.write(0xff);  
+
+      Serial2.print("evse_duty.val=");
+      Serial2.print(evse_duty);
+      Serial2.write(0xff);  // We always have to send this three lines after each command sent to the nextion display.
+      Serial2.write(0xff);
+      Serial2.write(0xff);
 
       Serial2.print("chargerstatus.val=");
       if (outlander_charger_reported_status == 0) {
@@ -3508,6 +3501,8 @@ void dashupdate()
         }
     } else if (inByte == 's') {
       EEPROM.put(0, settings); //save all change to eeprom
+    } else if (inByte == 'q') {
+      SOCoverride = Serial2.parseInt();
     }
     
   }
