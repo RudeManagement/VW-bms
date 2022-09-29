@@ -3,27 +3,17 @@
 #include <ACAN.h>
 #include <ACAN2515.h>
 #include <SPI.h>
+#define DEFAULT_CAN_INTERFACE_INDEX 0
 
 
-#ifdef __MK66FX1M0__
-static const byte MCP2515_SCK = 27 ; // SCK input of MCP2515
-static const byte MCP2515_SI  = 28 ; // SI input of MCP2515
-static const byte MCP2515_SO  = 39 ; // SO output of MCP2515
-static const byte MCP2515_CS  = 26 ; // CS input of MCP2515
-static const byte MCP2515_INT = 29 ; // INT output of MCP2515
-#else //Alternative SPI pins on teensy 3.2
+
 static const byte MCP2515_SCK = 14 ; // SCK input of MCP2515
 static const byte MCP2515_SI  = 7 ; // SI input of MCP2515
 static const byte MCP2515_SO  = 8 ; // SO output of MCP2515
 static const byte MCP2515_CS  = 15 ; // CS input of MCP2515
 static const byte MCP2515_INT = 2 ; // INT output of MCP2515
-#endif
-
-static const byte MCP2515_SCK_2 = 32 ; // SCK input of MCP2515
-static const byte MCP2515_SI_2  = 0 ; // SI input of MCP2515
-static const byte MCP2515_SO_2  = 1 ; // SO output of MCP2515
-static const byte MCP2515_CS_2  = 31 ; // CS input of MCP2515
-static const byte MCP2515_INT_2 = 30 ; // INT output of MCP2515
+static const byte MCP2515_CS_2  = 20 ; // CS input of MCP2515
+static const byte MCP2515_INT_2 = 16 ; // INT output of MCP2515
 
 
 typedef struct BMS_CAN_MESSAGE {

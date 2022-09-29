@@ -21,6 +21,7 @@ class BMSModuleManager
     void setBalanceV(float newVal);
     void setBalanceHyst(float newVal);
     void setSensors(int sensor, float Ignore, float VoltDelta);
+    void balanceCells(BMSCan bmscan, int debug, int idOffset, int canIndex);
     float getPackVoltage();
     float getAvgTemperature();
     float getHighTemperature();
@@ -36,7 +37,7 @@ class BMSModuleManager
     void printAllCSV(unsigned long timestamp, float current, int SOC);
     void printPackSummary();
     void printPackDetails(int digits);
-int getNumModules();
+  int getNumModules();
     bool checkcomms();
 
   private:
@@ -50,10 +51,13 @@ int getNumModules();
     float highestPackTemp;
     float highTemp;
     float lowTemp;
+    float BalHys;
     BMSModule modules[MAX_MODULE_ADDR + 1]; // store data for as many modules as we've configured for.
     int batteryID;
     int numFoundModules;                    // The number of modules that seem to exist
     bool isFaulted;
+    bool balancing;
+    uint8_t balcnt;
     int spack;
     /*
       void sendBatterySummary();

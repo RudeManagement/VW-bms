@@ -19,6 +19,7 @@ BMSModule::BMSModule()
   highestTemperature = -100.0f;
   lowestModuleVolt = 200.0f;
   highestModuleVolt = 0.0f;
+  balstat = 0;
   exists = false;
   reset = false;
   moduleAddress = 0;
@@ -35,6 +36,7 @@ void BMSModule::clearmodule()
   temperatures[0] = 0.0f;
   temperatures[1] = 0.0f;
   temperatures[2] = 0.0f;
+  balstat = 0;
   exists = false;
   reset = false;
   moduleAddress = 0;
@@ -51,7 +53,15 @@ void BMSModule::decodetemp(BMS_CAN_MESSAGE &msg)
   }
   else
   {
-    temperatures[0] = (msg.buf[0] * 0.5) - 43;
+    if (msg.buf[0] < 0xDF)
+    {
+      temperatures[0] = (msg.buf[0] * 0.5) - 43;
+      balstat = msg.buf[2] + (msg.buf[3] << 8);
+    }
+    else
+    {
+      temperatures[0] = (msg.buf[3] * 0.5) - 43;
+    }
     if (msg.buf[4] < 0xF0)
     {
       temperatures[1] = (msg.buf[4] * 0.5) - 43;
@@ -477,6 +487,11 @@ void BMSModule::setAddress(int newAddr)
 int BMSModule::getAddress()
 {
   return moduleAddress;
+}
+
+int BMSModule::getBalStat()
+{
+  return balstat;
 }
 
 bool BMSModule::isExisting()
