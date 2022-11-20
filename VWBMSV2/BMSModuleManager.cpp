@@ -54,8 +54,8 @@ bool BMSModuleManager::checkcomms()
 void BMSModuleManager::setBalanceHyst(float newVal)
 {
   BalHys = newVal;
-  Serial.println();
-  Serial.println(BalHys, 3);
+//  Serial.println();
+//  Serial.println(BalHys, 3);
 }
 
 
@@ -66,11 +66,11 @@ void BMSModuleManager::balanceCells(BMSCan bmscan, int debug, int idOffset, int 
   uint16_t balance = 0;//bit 0 - 5 are to activate cell balancing 1-6
   //Serial.println();
   // Serial.println(LowCellVolt + BalHys, 3);
-
-  Serial.println();
-  Serial.println();
-  Serial.print("Balcnt:");
-  Serial.println(balcnt);
+//
+//  Serial.println();
+//  Serial.println();
+//  Serial.print("Balcnt:");
+//  Serial.println(balcnt);
 
   if (balcnt > 60)
   {
@@ -163,54 +163,32 @@ void BMSModuleManager::balanceCells(BMSCan bmscan, int debug, int idOffset, int 
             case (8):
               OUTmsg.id  = 0x1A555418;
               break;
+            //Second pack ID's offset by 32
             case (9):
-              OUTmsg.id  = 0x1A55541A;
-              break;
-            case (10):
-              OUTmsg.id  = 0x1A5554AB;
-              break;
-            case (11):
-              OUTmsg.id  = 0x1A5554AD;
-              break;
-            case (12):
-              OUTmsg.id  = 0x1A5554AF;
-              break;
-            case (13):
               OUTmsg.id  = 0x1A55542A;
               break;
-            case (14):
+            case (10):
               OUTmsg.id  = 0x1A55542C;
               break;
-            case (15):
+            case (11):
               OUTmsg.id  = 0x1A55542E;
               break;
-            case (16):
+            case (12):
               OUTmsg.id  = 0x1A555430;
               break;
-            case (17):
+            case (13):
               OUTmsg.id  = 0x1A555432;
               break;
-            case (18):
+            case (14):
               OUTmsg.id  = 0x1A555434;
               break;
-            case (19):
+            case (15):
               OUTmsg.id  = 0x1A555436;
               break;
-            case (20):
+            case (16):
               OUTmsg.id  = 0x1A555438;
               break;
-            case (21):
-              OUTmsg.id  = 0x1A55543A;
-              break;
-            case (22):
-              OUTmsg.id  = 0x1A5554CB;
-              break;
-            case (23):
-              OUTmsg.id  = 0x1A5554CD;
-              break;
-            case (24):
-              OUTmsg.id  = 0x1A5554CF;
-              break;
+           
             default:
               break;
           }
@@ -262,53 +240,30 @@ void BMSModuleManager::balanceCells(BMSCan bmscan, int debug, int idOffset, int 
             case (8):
               OUTmsg.id  = 0x1A555419;
               break;
+            //second pack ID's offset by 32
             case (9):
-              OUTmsg.id  = 0x1A55541B;
-              break;
-            case (10):
-              OUTmsg.id  = 0x1A5554AC;
-              break;
-            case (11):
-              OUTmsg.id  = 0x1A5554AE;
-              break;
-            case (12):
-              OUTmsg.id  = 0x1A5554B0;
-              break;
-            case (13):
               OUTmsg.id  = 0x1A55542B;
               break;
-            case (14):
+            case (10):
               OUTmsg.id  = 0x1A55542D;
               break;
-            case (15):
+            case (11):
               OUTmsg.id  = 0x1A55542F;
               break;
-            case (16):
+            case (12):
               OUTmsg.id  = 0x1A555431;
               break;
-            case (17):
+            case (13):
               OUTmsg.id  = 0x1A555433;
               break;
-            case (18):
+            case (14):
               OUTmsg.id  = 0x1A555435;
               break;
-            case (19):
+            case (15):
               OUTmsg.id  = 0x1A555437;
               break;
-            case (20):
+            case (16):
               OUTmsg.id  = 0x1A555439;
-              break;
-            case (21):
-              OUTmsg.id  = 0x1A55543B;
-              break;
-            case (22):
-              OUTmsg.id  = 0x1A5554CC;
-              break;
-            case (23):
-              OUTmsg.id  = 0x1A5554CE;
-              break;
-            case (24):
-              OUTmsg.id  = 0x1A5554D0;
               break;
             default:
               break;
@@ -350,7 +305,7 @@ void BMSModuleManager::balanceCells(BMSCan bmscan, int debug, int idOffset, int 
       bmscan.write(OUTmsg, canIndex);
       delay(1);
 
-      OUTmsg.id  = 0x1A55540E;
+      OUTmsg.id  = 0x1A55542E;
       bmscan.write(OUTmsg, canIndex);
       delay(1);
 
@@ -374,23 +329,39 @@ void BMSModuleManager::balanceCells(BMSCan bmscan, int debug, int idOffset, int 
       bmscan.write(OUTmsg, canIndex);
       delay(1);
 
-      OUTmsg.id  = 0x1A55541A;
+      //second pack
+      OUTmsg.id  = 0x1A55542A;
       bmscan.write(OUTmsg, canIndex);
       delay(1);
 
-      OUTmsg.id  = 0x1A5554AB;
+      OUTmsg.id  = 0x1A55542C;
       bmscan.write(OUTmsg, canIndex);
       delay(1);
 
-      OUTmsg.id  = 0x1A5554AD;
+      OUTmsg.id  = 0x1A55542E;
       bmscan.write(OUTmsg, canIndex);
       delay(1);
 
-      OUTmsg.id  = 0x1A5554AF;
+      OUTmsg.id  = 0x1A555430;
       bmscan.write(OUTmsg, canIndex);
       delay(1);
 
+      OUTmsg.id  = 0x1A555432;
+      bmscan.write(OUTmsg, canIndex);
+      delay(1);
 
+      OUTmsg.id  = 0x1A555434;
+      bmscan.write(OUTmsg, canIndex);
+      delay(1);
+
+      OUTmsg.id  = 0x1A555436;
+      bmscan.write(OUTmsg, canIndex);
+      delay(1);
+
+      OUTmsg.id  = 0x1A555438;
+      bmscan.write(OUTmsg, canIndex);
+      delay(1);
+      
       OUTmsg.buf[0] = 0X00;
       OUTmsg.buf[1] = 0X00;
       OUTmsg.buf[2] = 0X00;
@@ -432,22 +403,39 @@ void BMSModuleManager::balanceCells(BMSCan bmscan, int debug, int idOffset, int 
       bmscan.write(OUTmsg, canIndex);
       delay(1);
 
-      OUTmsg.id  = 0x1A55541B;
+      // second pack
+              
+      OUTmsg.id  = 0x1A55542B;
       bmscan.write(OUTmsg, canIndex);
       delay(1);
 
-      OUTmsg.id  = 0x1A5554AC;
+      OUTmsg.id  = 0x1A55542D;
       bmscan.write(OUTmsg, canIndex);
       delay(1);
 
-      OUTmsg.id  = 0x1A5554AE;
+      OUTmsg.id  = 0x1A55542F;
       bmscan.write(OUTmsg, canIndex);
       delay(1);
 
-      OUTmsg.id  = 0x1A5554B0;
+      OUTmsg.id  = 0x1A555431;
+      bmscan.write(OUTmsg, canIndex);
+      delay(1);
+      
+      OUTmsg.id  = 0x1A555433;
+      bmscan.write(OUTmsg, canIndex);
+      delay(1);
+      
+      OUTmsg.id  = 0x1A555435;
       bmscan.write(OUTmsg, canIndex);
       delay(1);
 
+      OUTmsg.id  = 0x1A555437;
+      bmscan.write(OUTmsg, canIndex);
+      delay(1);
+      
+      OUTmsg.id  = 0x1A555439;
+      bmscan.write(OUTmsg, canIndex);
+      delay(1);
       balancing = false;
     }
   }

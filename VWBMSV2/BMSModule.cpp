@@ -527,9 +527,9 @@ void BMSModule::setReset(bool ex)
 void BMSModule::setIgnoreCell(float Ignore)
 {
   IgnoreCell = Ignore;
-  Serial.println();
-  Serial.println();
-  Serial.println(Ignore);
-  Serial.println();
+//  Serial.println();
+//  Serial.println();
+//  Serial.println(Ignore);
+//  Serial.println();
 
 }

@@ -56,6 +56,7 @@ This version of SimpBMS has been modified as the Space Balls edition utilising t
 #include <SPI.h>
 #include "BMSUtil.h"
 #include "BMSCan.h"
+#include <Filters.h>//https://github.com/JonHub/Filters
 
 #define CPU_REBOOT (_reboot_Teensyduino_());
 
@@ -184,7 +185,7 @@ unsigned long inverterLastRec;
 byte inverterStatus;
 bool inverterInDrive = false;
 bool rapidCharging = false;
-unsigned long looptime, looptime1, UnderTime, cleartime, chargertimer = 0; //ms
+unsigned long looptime, looptime1, looptime2, UnderTime, cleartime, chargertimer = 0; //ms
 int currentsense = 14;
 int sensor = 1;
 
@@ -547,8 +548,8 @@ void loop()
           if (bms.getHighCellVolt() > settings.balanceVoltage && bms.getHighCellVolt() > bms.getLowCellVolt() + settings.balanceHyst)
           {
             //bms.balanceCells();
-            //balancecells = 1;
-            balancecells = 0; //disabled for now
+            balancecells = 1;
+//          //balancecells = 0; //disabled for now
           }
           else
           {
@@ -601,9 +602,9 @@ void loop()
           if (!rapidCharging &&inverterControlledContactorsStatus() && inverterInDrive) {
              bmsstatus = Drive;
           }
-          if (rapidCharging &&inverterControlledContactorsStatus()) {
-             bmsstatus = RapidCharge;
-          }
+//          if (rapidCharging &&inverterControlledContactorsStatus()) {
+//             bmsstatus = RapidCharge;
+//          }
           break;
 
 
@@ -626,8 +627,8 @@ void loop()
           if (bms.getHighCellVolt() > settings.balanceVoltage)
           {
             //bms.balanceCells();
-            //balancecells = 1;
-            balancecells = 0; //disabled for now
+            balancecells = 1;
+            //balancecells = 0; //disabled for now
 
           }
           else
@@ -728,16 +729,6 @@ void loop()
       ErrorReason = ErrorReason & ~0x02;
     }
     
-
-    if (debug != 0)
-    {
-      printbmsstat();
-      bms.printPackDetails(debugdigits);
-    }
-    if (CSVdebug != 0)
-    {
-      bms.printAllCSV(millis(), currentact, SOC);
-    }
     if (inputcheck != 0)
     {
       inputdebug();
@@ -797,6 +788,22 @@ void loop()
 
     resetwdog();
   }
+
+  if (millis() - looptime2 > 5000)
+  {
+    looptime2 = millis();
+
+    if (debug != 0)
+    {
+      printbmsstat();
+      bms.printPackDetails(debugdigits);
+    }
+    if (CSVdebug != 0)
+    {
+      bms.printAllCSV(millis(), currentact, SOC);
+    }
+  }
+  
   if (millis() - cleartime > 20000)
   {
     if (bms.checkcomms())
