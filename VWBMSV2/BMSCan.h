@@ -36,6 +36,7 @@ class BMSCan
      void begin(uint32_t baud, int interfaceIndex);
      uint32_t available (int interfaceIndex);
      int read (BMS_CAN_MESSAGE &msg, int interfaceIndex);
+     ACAN2515* can2;
   private:
      CANMessage convert(const BMS_CAN_MESSAGE &msg);
      BMS_CAN_MESSAGE convert(const CANMessage &msg);

@@ -3,7 +3,7 @@
 #include <ACAN.h>
 #include <ACAN2515.h>
 
-ACAN2515* can2;
+
 ACAN2515* can3;
 bool started[] = {false, false, false, false};
      
@@ -42,7 +42,7 @@ int BMSCan::read (BMS_CAN_MESSAGE &msg, int interfaceIndex) {
     response = ACAN::can1.receive(readMesg);
     #endif
   } else if (interfaceIndex == 2) {
-    response = can2->receive(readMesg);
+    //response = can2->receive(readMesg);
   } else if (interfaceIndex == 3) {
     response = can3->receive(readMesg);
   }
@@ -59,12 +59,15 @@ uint32_t BMSCan::available (int interfaceIndex) {
     return ACAN::can1.available();
     #endif
   } else if (interfaceIndex == 2 && started[interfaceIndex]) {
-    return can2->available();
+    //return can2->available();
   } else if (interfaceIndex == 3 && started[interfaceIndex]) {
     return can3->available();
   }
   return 0;
 }
+
+
+
 void BMSCan::begin(uint32_t baud, int interfaceIndex) {
 
   if (interfaceIndex == 0 && !started[interfaceIndex]) {
@@ -78,9 +81,19 @@ void BMSCan::begin(uint32_t baud, int interfaceIndex) {
     #endif
     started[interfaceIndex] = true;
   } else if (interfaceIndex == 2 && !started[interfaceIndex]) {
-    can2 = new ACAN2515 (MCP2515_CS, SPI, MCP2515_INT) ;
-    ACAN2515Settings settings(8 * 1000 * 1000, baud);
-    can2->begin(settings, [] { can2->isr () ; });
+//    can2 = new ACAN2515 (MCP2515_CS, SPI, MCP2515_INT) ;
+//    ACAN2515Settings settings(8 * 1000 * 1000, baud);
+//    const ACAN2515Mask rxm0 = standard2515Mask(0x7FF, 0, 0) ; // For filter #0 and #1
+//    const ACAN2515Mask rxm1 = standard2515Mask(0x7FF, 0, 0) ; // For filter #2 to #
+//    const ACAN2515AcceptanceFilter filters [] = {
+//      {standard2515Filter(0x520, 0, 0), receivedFiltered},
+//      {standard2515Filter(0x380, 0, 0), receivedFiltered},
+//      {standard2515Filter(0x02, 0, 0), receivedFiltered},
+//      {standard2515Filter(0x01, 0, 0), receivedFiltered},
+//      {standard2515Filter(0x354, 0, 0), receivedFiltered}
+//    };
+//    const uint16_t errorCode = can2->begin (settings, [] { bmsCan.isr () ; }, rxm0, rxm1, filters, 5) ;
+    //can2->begin(settings, [] { can2->isr () ; });
     started[interfaceIndex] = true;
   } else if (interfaceIndex == 3 && !started[interfaceIndex]) {
    can3 = new ACAN2515 (MCP2515_CS_2, SPI, MCP2515_INT_2) ;

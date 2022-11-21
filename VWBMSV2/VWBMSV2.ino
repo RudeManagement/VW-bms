@@ -243,6 +243,64 @@ int debugdigits = 2; //amount of digits behind decimal for voltage reading
 
 ADC *adc = new ADC(); // adc object
 
+void getcurrent();
+static void receivedFiltered (const CANMessage & inMsg) {
+    if (candebug ==1) {
+          Serial.print(millis());
+          if ((inMsg.id & 0x80000000) == 0x80000000)    // Determine if ID is standard (11 bits) or extended (29 bits)
+            sprintf(msgString, "Extended ID: 0x%.8lX  DLC: %1d  Data:", (inMsg.id & 0x1FFFFFFF), inMsg.len);
+          else
+            sprintf(msgString, ",0x%.3lX,false,%1d", inMsg.id, inMsg.len);
+
+          Serial.print(msgString);
+
+          Serial.println(" Filtered Can ");
+    }
+
+    if (inMsg.id == 0x389) {
+      outlander_charger_reported_voltage = inMsg.data[0] * 2;
+      outlander_charger_reported_current = inMsg.data[2];
+      outlander_charger_reported_temp1 = inMsg.data[3] - 40;
+      outlander_charger_reported_temp2 = inMsg.data[4] - 40;
+
+    } else if (inMsg.id == 0x38A) {
+       outlander_charger_reported_status = inMsg.data[4];
+       evse_duty = inMsg.data[3];
+    } else if (inMsg.id == 0x527) {
+        long ampseconds = inMsg.data[2] + (inMsg.data[3] << 8) + (inMsg.data[4] << 16) + (inMsg.data[5] << 24);
+        amphours = ampseconds/3600.0f;
+    } else if(inMsg.id == 0x521) {
+        CANmilliamps = inMsg.data[2] + (inMsg.data[3] << 8) + (inMsg.data[4] << 16) + (inMsg.data[5] << 24);
+        RawCur = CANmilliamps; 
+        getcurrent();
+    } else if(inMsg.id == 0x522) {
+        voltage1 = inMsg.data[2] + (inMsg.data[3] << 8) + (inMsg.data[4] << 16) + (inMsg.data[5] << 24);
+    } else if(inMsg.id == 0x523) {
+         voltage2 = inMsg.data[2] + (inMsg.data[3] << 8) + (inMsg.data[4] << 16) + (inMsg.data[5] << 24);
+    } else if(inMsg.id == 0x526) {
+        long watt = inMsg.data[2] + (inMsg.data[3] << 8) + (inMsg.data[4] << 16) + (inMsg.data[5] << 24);
+        kilowatts = watt/1000.0f;
+    } else if(inMsg.id == 0x527) {
+        long ampseconds = inMsg.data[2] + (inMsg.data[3] << 8) + (inMsg.data[4] << 16) + (inMsg.data[5] << 24);
+        amphours = ampseconds/3600.0f;
+    } else if(inMsg.id == 0x528) {
+        long wh = inMsg.data[2] + (inMsg.data[3] << 8) + (inMsg.data[4] << 16) + (inMsg.data[5] << 24);
+        kilowatthours = wh/1000.0f;
+    } else if (inMsg.id == 0x02) {
+      inverterLastRec = millis();
+      inverterStatus = inMsg.data[0];
+    }
+    //canio
+    else if (inMsg.id == 0x01) {
+      inverterInDrive = inMsg.data[1] & 0x80 == 0x80;
+    }
+    //chademo
+    else if (inMsg.id == 0x354 && inMsg.data[0] == 0x01) {
+      rapidCharging = true;
+    }
+  
+}
+
 bool chargeEnabled() {
   return digitalRead(IN3) == HIGH || chargeOverride == 1;
 }
@@ -442,9 +500,22 @@ void setup()
   }
 
   bmscan.begin(500000, DEFAULT_CAN_INTERFACE_INDEX);
+  bmscan.can2 = new ACAN2515 (MCP2515_CS, SPI, MCP2515_INT) ;
+  ACAN2515Settings cansettings(8 * 1000 * 1000, 500000);
+  const ACAN2515Mask rxm0 = standard2515Mask(0x7FF, 0, 0) ; // For filter #0 and #1
+  const ACAN2515Mask rxm1 = standard2515Mask(0x7F0, 0, 0) ; // For filter #2 to #
+  const ACAN2515AcceptanceFilter filters [] = {
+    {standard2515Filter(0x02, 0, 0), receivedFiltered},
+    {standard2515Filter(0x02, 0, 0), receivedFiltered},
+    {standard2515Filter(0x520, 0, 0), receivedFiltered},
+    {standard2515Filter(0x380, 0, 0), receivedFiltered},
+    {standard2515Filter(0x354, 0, 0), receivedFiltered}
+  };
+  const uint16_t errorCode = bmscan.can2->begin (cansettings, [] { bmscan.can2->isr () ; }, rxm0, rxm1, filters, 5) ;
   bmscan.begin(500000, settings.chargerCanIndex);
-  bmscan.begin(500000, settings.veCanIndex);
-  bmscan.begin(500000, settings.secondBatteryCanIndex);
+  
+//  bmscan.begin(500000, settings.veCanIndex);
+//  bmscan.begin(500000, settings.secondBatteryCanIndex);
 
   Logger::setLoglevel(Logger::Off); //Debug = 0, Info = 1, Warn = 2, Error = 3, Off = 4
 
@@ -498,23 +569,26 @@ void loop()
     canread(DEFAULT_CAN_INTERFACE_INDEX, 0);
   }
 
-  //read secondBatteryCan if different from deafult. (If same as default, no secondard pack installed)
-  if (settings.secondBatteryCanIndex != DEFAULT_CAN_INTERFACE_INDEX) {
-    canread(settings.secondBatteryCanIndex, 32);
-  }
-  
-  //read chargerCan if different to DEFAULT and different to secondary
-  if (settings.chargerCanIndex != DEFAULT_CAN_INTERFACE_INDEX 
-    && settings.chargerCanIndex != settings.secondBatteryCanIndex) {
-    canread(settings.chargerCanIndex, 0);
-  }
+  bmscan.can2->dispatchReceivedMessage () ;
 
-  //read veCan if different to DEFAULT and charger, and secondary
-  if (settings.veCanIndex != DEFAULT_CAN_INTERFACE_INDEX 
-    && settings.veCanIndex != settings.chargerCanIndex 
-    && settings.veCanIndex != settings.secondBatteryCanIndex) {
-    canread(settings.veCanIndex, 0);
-  }
+
+  //read secondBatteryCan if different from deafult. (If same as default, no secondard pack installed)
+//  if (settings.secondBatteryCanIndex != DEFAULT_CAN_INTERFACE_INDEX) {
+//    canread(settings.secondBatteryCanIndex, 32);
+//  }
+  
+//  //read chargerCan if different to DEFAULT and different to secondary
+//  if (settings.chargerCanIndex != DEFAULT_CAN_INTERFACE_INDEX 
+//    && settings.chargerCanIndex != settings.secondBatteryCanIndex) {
+//    canread(settings.chargerCanIndex, 0);
+//  }
+//
+//  //read veCan if different to DEFAULT and charger, and secondary
+//  if (settings.veCanIndex != DEFAULT_CAN_INTERFACE_INDEX 
+//    && settings.veCanIndex != settings.chargerCanIndex 
+//    && settings.veCanIndex != settings.secondBatteryCanIndex) {
+//    canread(settings.veCanIndex, 0);
+//  }
 
 
   
@@ -2830,86 +2904,86 @@ void canread(int canInterfaceOffset, int idOffset)
 
 
   // Read data: len = data length, buf = data byte(s)
-  if ( settings.cursens == Canbus)
-  {
-
-    if (settings.curcan == 1)
-    {
-      switch (inMsg.id)
-      {
-        case 0x3c1:
-          CAB500();
-          break;
-
-        case 0x3c2:
-          CAB300();
-          break;
-
-        default:
-          break;
-      }
-    }
-    if (settings.curcan == 2)
-    {
-      switch (inMsg.id)
-      {
-        case 0x3c1:
-          CAB500();
-          break;
-
-        case 0x3c2:
-          CAB500();
-          break;
-
-        default:
-          break;
-      }
-    }
-    if (settings.curcan == 3)
-    {
-
-      //Wont match in the switch statement below for some reason
-      if (inMsg.id == 0x527) {
-        long ampseconds = inMsg.buf[2] + (inMsg.buf[3] << 8) + (inMsg.buf[4] << 16) + (inMsg.buf[5] << 24);
-        amphours = ampseconds/3600.0f;
-      }
-      switch (inMsg.id)
-      {
-        case 0x521: //
-          CANmilliamps = inMsg.buf[2] + (inMsg.buf[3] << 8) + (inMsg.buf[4] << 16) + (inMsg.buf[5] << 24);
-          RawCur = CANmilliamps; 
-          getcurrent();
-          break;
-        case 0x522: //
-          voltage1 = inMsg.buf[2] + (inMsg.buf[3] << 8) + (inMsg.buf[4] << 16) + (inMsg.buf[5] << 24);
-          break;
-        case 0x523: //
-          voltage2 = inMsg.buf[2] + (inMsg.buf[3] << 8) + (inMsg.buf[4] << 16) + (inMsg.buf[5] << 24);
-          break;
-        case 0x526: 
-          long watt = inMsg.buf[2] + (inMsg.buf[3] << 8) + (inMsg.buf[4] << 16) + (inMsg.buf[5] << 24);
-          kilowatts = watt/1000.0f;
-          break;
-        case 0x527: 
-          long ampseconds = inMsg.buf[2] + (inMsg.buf[3] << 8) + (inMsg.buf[4] << 16) + (inMsg.buf[5] << 24);
-          Serial.println("-----------------------");
-          amphours = ampseconds/3600.0f;
-          break;
-        case 0x528: 
-          long wh = inMsg.buf[2] + (inMsg.buf[3] << 8) + (inMsg.buf[4] << 16) + (inMsg.buf[5] << 24);
-          kilowatthours = wh/1000.0f;
-          break;
-      }
-
-    }
-    if (settings.curcan == 4)
-    {
-      if (pgnFromCANId(inMsg.id) == 0x1F214 && inMsg.buf[0] == 0) // Check PGN and only use the first packet of each sequence
-      {
-        handleVictronLynx();
-      }
-    }
-  }
+//  if ( settings.cursens == Canbus)
+//  {
+//
+//    if (settings.curcan == 1)
+//    {
+//      switch (inMsg.id)
+//      {
+//        case 0x3c1:
+//          CAB500();
+//          break;
+//
+//        case 0x3c2:
+//          CAB300();
+//          break;
+//
+//        default:
+//          break;
+//      }
+//    }
+//    if (settings.curcan == 2)
+//    {
+//      switch (inMsg.id)
+//      {
+//        case 0x3c1:
+//          CAB500();
+//          break;
+//
+//        case 0x3c2:
+//          CAB500();
+//          break;
+//
+//        default:
+//          break;
+//      }
+//    }
+//    if (settings.curcan == 3)
+//    {
+//
+//      //Wont match in the switch statement below for some reason
+//      if (inMsg.id == 0x527) {
+//        long ampseconds = inMsg.buf[2] + (inMsg.buf[3] << 8) + (inMsg.buf[4] << 16) + (inMsg.buf[5] << 24);
+//        amphours = ampseconds/3600.0f;
+//      }
+//      switch (inMsg.id)
+//      {
+//        case 0x521: //
+//          CANmilliamps = inMsg.buf[2] + (inMsg.buf[3] << 8) + (inMsg.buf[4] << 16) + (inMsg.buf[5] << 24);
+//          RawCur = CANmilliamps; 
+//          getcurrent();
+//          break;
+//        case 0x522: //
+//          voltage1 = inMsg.buf[2] + (inMsg.buf[3] << 8) + (inMsg.buf[4] << 16) + (inMsg.buf[5] << 24);
+//          break;
+//        case 0x523: //
+//          voltage2 = inMsg.buf[2] + (inMsg.buf[3] << 8) + (inMsg.buf[4] << 16) + (inMsg.buf[5] << 24);
+//          break;
+//        case 0x526: 
+//          long watt = inMsg.buf[2] + (inMsg.buf[3] << 8) + (inMsg.buf[4] << 16) + (inMsg.buf[5] << 24);
+//          kilowatts = watt/1000.0f;
+//          break;
+//        case 0x527: 
+//          long ampseconds = inMsg.buf[2] + (inMsg.buf[3] << 8) + (inMsg.buf[4] << 16) + (inMsg.buf[5] << 24);
+//          Serial.println("-----------------------");
+//          amphours = ampseconds/3600.0f;
+//          break;
+//        case 0x528: 
+//          long wh = inMsg.buf[2] + (inMsg.buf[3] << 8) + (inMsg.buf[4] << 16) + (inMsg.buf[5] << 24);
+//          kilowatthours = wh/1000.0f;
+//          break;
+//      }
+//
+//    }
+//    if (settings.curcan == 4)
+//    {
+//      if (pgnFromCANId(inMsg.id) == 0x1F214 && inMsg.buf[0] == 0) // Check PGN and only use the first packet of each sequence
+//      {
+//        handleVictronLynx();
+//      }
+//    }
+//  }
 
 
   if (inMsg.id < 0x300 && inMsg.id > 0x20)//do VW BMS magic if ids are ones identified to be modules
@@ -2943,34 +3017,35 @@ void canread(int canInterfaceOffset, int idOffset)
 
   }
 
-  if (settings.chargerCanIndex == canInterfaceOffset && settings.chargertype == Outlander) {
-    if (inMsg.id == 0x389) {
-      outlander_charger_reported_voltage = inMsg.buf[0] * 2;
-      outlander_charger_reported_current = inMsg.buf[2];
-      outlander_charger_reported_temp1 = inMsg.buf[3] - 40;
-      outlander_charger_reported_temp2 = inMsg.buf[4] - 40;
+//moved to filtered
+//  if (settings.chargerCanIndex == canInterfaceOffset && settings.chargertype == Outlander) {
+//    if (inMsg.id == 0x389) {
+//      outlander_charger_reported_voltage = inMsg.buf[0] * 2;
+//      outlander_charger_reported_current = inMsg.buf[2];
+//      outlander_charger_reported_temp1 = inMsg.buf[3] - 40;
+//      outlander_charger_reported_temp2 = inMsg.buf[4] - 40;
+//
+//    } else if (inMsg.id == 0x38A) {
+//       outlander_charger_reported_status = inMsg.buf[4];
+//       evse_duty = inMsg.buf[3];
+//    }
+//  }
 
-    } else if (inMsg.id == 0x38A) {
-       outlander_charger_reported_status = inMsg.buf[4];
-       evse_duty = inMsg.buf[3];
-    }
-  }
-
-  if (settings.veCanIndex == canInterfaceOffset) {
-    //from inverter
-    if (inMsg.id == 0x02) {
-      inverterLastRec = millis();
-      inverterStatus = inMsg.buf[0];
-    }
-    //canio
-    if (inMsg.id == 0x01) {
-      inverterInDrive = inMsg.buf[1] & 0x80 == 0x80;
-    }
-    //chademo
-    if (inMsg.id == 0x354 && inMsg.buf[0] == 0x01) {
-      rapidCharging = true;
-    }
-  }
+//  if (settings.veCanIndex == canInterfaceOffset) {
+//    //from inverter
+//    if (inMsg.id == 0x02) {
+//      inverterLastRec = millis();
+//      inverterStatus = inMsg.buf[0];
+//    }
+//    //canio
+//    if (inMsg.id == 0x01) {
+//      inverterInDrive = inMsg.buf[1] & 0x80 == 0x80;
+//    }
+//    //chademo
+//    if (inMsg.id == 0x354 && inMsg.buf[0] == 0x01) {
+//      rapidCharging = true;
+//    }
+//  }
 
   if (candebug == 1)
   {
@@ -2991,7 +3066,7 @@ void canread(int canInterfaceOffset, int idOffset)
         Serial.print(msgString);
       }
     }
-    Serial.print("Can Interface: ");
+    Serial.print(" Can Interface: ");
     Serial.print(canInterfaceOffset);
     Serial.println();
   }
