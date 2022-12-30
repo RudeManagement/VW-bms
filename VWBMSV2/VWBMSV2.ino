@@ -1,4 +1,4 @@
-/*
+  /*
   Copyright (c) 2019 Simp ECO Engineering
   Permission is hereby granted, free of charge, to any person obtaining
   a copy of this software and associated documentation files (the
@@ -197,8 +197,9 @@ int NextRunningAverage;
 //Variables for SOC calc
 int SOC = 100; //State of Charge
 int SOCset = 0;
+int SOCreset = 0;
 int SOCtest = 0;
-int SOCoverride = -1;
+int SOCmem = 0;
 
 ///charger variables
 int maxac1 = 16; //Shore power 16A per charger
@@ -437,13 +438,13 @@ void setup()
   SPI.setSCK (MCP2515_SCK) ;
   SPI.begin () ;
   
-  #ifdef __MK66FX1M0__
+/* #ifdef __MK66FX1M0__
   SPI1.setMOSI (MCP2515_SI_2) ;
   SPI1.setMISO (MCP2515_SO_2) ;
   SPI1.setSCK (MCP2515_SCK_2) ;
   SPI1.begin () ;
   #endif
-
+*/
 
   SERIALCONSOLE.begin(115200);
   SERIALCONSOLE.println("Starting up!");
@@ -524,7 +525,25 @@ void setup()
   bms.setPstrings(settings.Pstrings);
   bms.setSensors(settings.IgnoreTemp, settings.IgnoreVolt, settings.DeltaVolt);
   bms.setBalanceHyst(settings.balanceHyst);
-  
+   //SOC recovery//
+
+  SOC = (EEPROM.read(1000));
+  if (settings.voltsoc == 1)
+  {
+    SOCmem = 0;
+  }
+  else
+  {
+    if (SOC > 100)
+    {
+      SOCmem = 0;
+    }
+    else if (SOC > 1)
+    {
+      //SOCmem = 1;
+    }
+  }
+
   ////Calculate fixed numbers
   pwmcurmin = (pwmcurmid / 50 * pwmcurmax * -1);
   ////
@@ -648,7 +667,7 @@ void loop()
             else
             {
               bmsstatus = Precharge;
-            }
+            } 
           }
           if (rapidCharging) {
             if (inverterControlledContactorsStatus())
@@ -994,7 +1013,7 @@ void gaugeupdate()
     SERIALCONSOLE.print(map(SOCtest * 0.1, 0, 100, settings.gaugelow, settings.gaugehigh));
     SERIALCONSOLE.println("  ");
   }
-  if (gaugedebug == 2)
+  if (gaugedebug == 2) 
   {
     SOCtest = 0;
     analogWrite(OUT8, map(SOCtest * 0.1, 0, 100, settings.gaugelow, settings.gaugehigh));
@@ -1344,9 +1363,79 @@ void getcurrent()
 
 void updateSOC()
 {
-  //current shunt based SOC
-  SOC = (((settings.CAP) - amphours) / (settings.CAP) ) * 100;
-  SOCset = 1;
+  if (SOCreset == 1)
+  {
+    SOC = map(uint16_t(bms.getLowCellVolt() * 1000), settings.socvolt[0], settings.socvolt[2], settings.socvolt[1], settings.socvolt[3]);
+    ampsecond = (SOC * settings.CAP * settings.Pstrings * 10) / 0.27777777777778 ;
+    SOCreset = 0;
+  }
+
+  if (SOCset == 0)
+  {
+    if (millis() > 8000)
+    {
+      if (SOCmem == 0)
+      {
+        SOC = map(uint16_t(bms.getLowCellVolt() * 1000), settings.socvolt[0], settings.socvolt[2], settings.socvolt[1], settings.socvolt[3]);
+        ampsecond = (SOC * settings.CAP * settings.Pstrings * 10) / 0.27777777777778 ;
+        if (debug != 0)
+        {
+          SERIALCONSOLE.println("  ");
+          SERIALCONSOLE.println("//////////////////////////////////////// SOC SET ////////////////////////////////////////");
+        }
+      }
+      SOCset = 1;
+    }
+  }
+  if (settings.voltsoc == 1 || settings.cursens == 0)
+  {
+    SOC = map(uint16_t(bms.getLowCellVolt() * 1000), settings.socvolt[0], settings.socvolt[2], settings.socvolt[1], settings.socvolt[3]);
+
+    ampsecond = (SOC * settings.CAP * settings.Pstrings * 10) / 0.27777777777778 ;
+  }
+  SOC = ((ampsecond * 0.27777777777778) / (settings.CAP * settings.Pstrings * 1000)) * 100;
+  if (SOC >= 100)
+  {
+    ampsecond = (settings.CAP * settings.Pstrings * 1000) / 0.27777777777778 ; //reset to full, dependant on given capacity. Need to improve with auto correction for capcity.
+    SOC = 100;
+  }
+
+
+  if (SOC < 0)
+  {
+    SOC = 0; //reset SOC this way the can messages remain in range for other devices. Ampseconds will keep counting.
+  }
+
+  if (debug != 0)
+  {
+    if (settings.cursens == Analoguedual)
+    {
+      if (sensor == 1)
+      {
+        SERIALCONSOLE.print("Low Range ");
+      }
+      else
+      {
+        SERIALCONSOLE.print("High Range");
+      }
+    }
+    if (settings.cursens == Analoguesing)
+    {
+      SERIALCONSOLE.print("Analogue Single ");
+    }
+    if (settings.cursens == Canbus)
+    {
+      SERIALCONSOLE.print("CANbus ");
+    }
+    SERIALCONSOLE.print("  ");
+    SERIALCONSOLE.print(currentact);
+    SERIALCONSOLE.print("mA");
+    SERIALCONSOLE.print("  ");
+    SERIALCONSOLE.print(SOC);
+    SERIALCONSOLE.print("% SOC ");
+    SERIALCONSOLE.print(ampsecond * 0.27777777777778, 2);
+    SERIALCONSOLE.print ("mAh");
+  }
 }
 
 void SOCcharged(int y)
@@ -1514,23 +1603,17 @@ void VEcan() //communication with Victron system over CAN
 
   bmscan.write(msg, settings.veCanIndex);
 
-  msg.id  = 0x355;
-  msg.len = 8;
-  if (SOCoverride != -1) {
-    msg.buf[0] = lowByte(SOCoverride);
-    msg.buf[1] = highByte(SOCoverride);
-    msg.buf[2] = lowByte(SOH);
-    msg.buf[3] = highByte(SOH);
-    msg.buf[4] = lowByte(SOCoverride * 10);
-    msg.buf[5] = highByte(SOCoverride * 10);
-  } else {
+    msg.id  = 0x355;
+    msg.len = 8;
     msg.buf[0] = lowByte(SOC);
     msg.buf[1] = highByte(SOC);
     msg.buf[2] = lowByte(SOH);
     msg.buf[3] = highByte(SOH);
     msg.buf[4] = lowByte(SOC * 10);
     msg.buf[5] = highByte(SOC * 10);
-  }
+    msg.buf[6] = 0;
+    msg.buf[7] = 0;
+   bmscan.write(msg, settings.veCanIndex);
 
   //Send Charge if in Precharge for VCU
   if (bmsstatus == Precharge) {
@@ -3472,11 +3555,11 @@ void dashupdate()
   }
   Serial2.println();
   Serial2.print("soc.val=");
-  if (SOCoverride != -1) {
+/*  if (SOCoverride != -1) {
     Serial2.print(SOCoverride);
   } else {
     Serial2.print(SOC);
-  }
+  }*/
   Serial2.println();
   Serial2.print("soc1.val=");
   Serial2.print(SOC);
@@ -3520,8 +3603,8 @@ void dashupdate()
   Serial2.print("inverterstatus.val=");
   Serial2.print(inverterStatus);
   Serial2.println();
-  Serial2.print("socOverride.val=");
-  Serial2.print(SOCoverride);
+ /* Serial2.print("socOverride.val=");
+  Serial2.print(SOCoverride);*/
   Serial2.println();
 
   if (settings.curcan == IsaScale) {
@@ -3613,7 +3696,7 @@ void dashupdate()
     } else if (inByte == 's') {
       EEPROM.put(0, settings); //save all change to eeprom
     } else if (inByte == 'q') {
-      SOCoverride = Serial2.parseInt();
+       // SOCoverride = Serial2.parseInt();
     } else if (inByte == 'r') {//reset ISA shunt
       resetISACounters();
     } else if (inByte == 'b') {
