@@ -1,69 +1,69 @@
 #pragma once
+#include "config.h"
+#include "BMSModule.h"
 #include "BMSCan.h"
 
-class BMSModule
+class BMSModuleManager
 {
   public:
-    BMSModule();
-    void decodecan(int Id, BMS_CAN_MESSAGE &msg);
-    void decodetemp(BMS_CAN_MESSAGE &msg);
-    void clearmodule();
-    int getscells();
-    float getCellVoltage(int cell);
-    float getLowCellV();
-    float getHighCellV();
-    float getAverageV();
-    float getLowTemp();
-    float getHighTemp();
-    float getHighestModuleVolt();
-    float getLowestModuleVolt();
-    float getHighestCellVolt(int cell);
-    float getLowestCellVolt(int cell);
-    float getHighestTemp();
-    float getLowestTemp();
-    float getAvgTemp();
-    float getModuleVoltage();
-    float getTemperature(int temp);
-    uint8_t getFaults();
-    uint8_t getAlerts();
-    uint8_t getCOVCells();
-    uint8_t getCUVCells();
-    void setAddress(int newAddr);
-    int getAddress();
-    int getBalStat();
-    bool isExisting();
-    bool isReset();
-    void setReset(bool ex);
-    void setExists(bool ex);
-    void settempsensor(int tempsensor);
-    void setIgnoreCell(float Ignore);
-    void setDelta(float ex);
-
+    BMSModuleManager();
+    int seriescells();
+    void clearmodules();
+    void decodecan(BMS_CAN_MESSAGE &msg, int debug);
+    void decodetemp(BMS_CAN_MESSAGE &msg, int debug);
+    void getAllVoltTemp();
+    void readSetpoints();
+    void setBatteryID(int id);
+    void setPstrings(int Pstrings);
+    void setUnderVolt(float newVal);
+    void setOverVolt(float newVal);
+    void setOverTemp(float newVal);
+    void setBalanceV(float newVal);
+    void setBalanceHyst(float newVal);
+    void setSensors(int sensor, float Ignore, float VoltDelta);
+    void balanceCells(BMSCan bmscan, int debug, int idOffset, int canIndex);
+    float getPackVoltage();
+    float getAvgPackVoltage();
+    float getAvgTemperature();
+    float getHighTemperature();
+    float getLowTemperature();
+    float getAvgCellVolt();
+    float getLowCellVolt();
+    float getHighCellVolt();
+    float getHighVoltage();
+    float getLowVoltage();
+    /*
+      void processCANMsg(CAN_FRAME &frame);
+    */
+    void printAllCSV(unsigned long timestamp, float current, int SOC);
+    void printPackSummary();
+    void printPackDetails(int digits);
+  int getNumModules();
+    bool checkcomms();
 
   private:
-    float cellVolt[13];          // calculated as 16 bit value * 6.250 / 16383 = volts
-    float lowestCellVolt[13];
-    float highestCellVolt[13];
-    float moduleVolt;          // calculated as 16 bit value * 33.333 / 16383 = volts
-    float temperatures[3];     // Don't know the proper scaling at this point
-    float lowestTemperature;
-    float highestTemperature;
-    float lowestModuleVolt;
-    float highestModuleVolt;
-    float IgnoreCell;
-    float VoltDelta;
-    bool exists;
-    bool reset;
-    int alerts;
-    int faults;
-    int COVFaults;
-    int CUVFaults;
-    int sensor;
-    uint8_t moduleAddress;     //1 to 0x3E
-    int scells;
-    uint32_t balstat;
-    uint32_t lasterror;
-    uint8_t cmuerror;
-    uint32_t timeout;
+    float packVolt;                         // All modules added together
+    int Pstring;
+    float LowCellVolt;
+    float HighCellVolt;
+    float lowestPackVolt;
+    float highestPackVolt;
+    float lowestPackTemp;
+    float highestPackTemp;
+    float highTemp;
+    float lowTemp;
+    float BalHys;
+    BMSModule modules[MAX_MODULE_ADDR + 1]; // store data for as many modules as we've configured for.
+    int batteryID;
+    int numFoundModules;                    // The number of modules that seem to exist
+    bool isFaulted;
+    bool balancing;
+    uint8_t balcnt;
+    int spack;
+    /*
+      void sendBatterySummary();
+      void sendModuleSummary(int module);
+      void sendCellDetails(int module, int cell);
+    */
 
 };
