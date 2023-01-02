@@ -1157,6 +1157,26 @@ float BMSModuleManager::getLowTemperature()
   return lowTemp;
 }
 
+float BMSModuleManager::getAvgPackVoltage()
+{
+    float avg = 0.0f;
+    numFoundModules = 0;
+    for (int x = 1; x <= MAX_MODULE_ADDR; x++)
+  {
+    if (modules[x].isExisting())
+    {
+      if (modules[x].getAverageV() > 0)
+      {
+        avg += modules[x].getAverageV();
+        numFoundModules++;
+      }
+    }
+  }
+  avg = (avg / (float)numFoundModules) * settings.Scells;
+
+  return avg;
+}
+
 float BMSModuleManager::getAvgCellVolt()
 {
   numFoundModules = 0;
@@ -1188,7 +1208,7 @@ void BMSModuleManager::printPackSummary()
   Logger::console("");
   Logger::console("");
   Logger::console("Modules: %i  Cells: %i  Voltage: %fV   Avg Cell Voltage: %fV     Avg Temp: %fC ", numFoundModules, seriescells(),
-                  getPackVoltage(), getAvgCellVolt(), getAvgTemperature());
+                  getAvgPackVoltage(), getAvgCellVolt(), getAvgTemperature());
   Logger::console("");
   for (int y = 1; y < 63; y++)
   {
@@ -1302,7 +1322,7 @@ void BMSModuleManager::printPackDetails(int digits)
   Logger::console("");
   Logger::console("");
   Logger::console("Modules: %i Cells: %i Strings: %i  Voltage: %fV   Avg Cell Voltage: %fV  Low Cell Voltage: %fV   High Cell Voltage: %fV Delta Voltage: %zmV   Avg Temp: %fC ", numFoundModules, seriescells(),
-                  Pstring, getPackVoltage(), getAvgCellVolt(), LowCellVolt, HighCellVolt, (HighCellVolt - LowCellVolt) * 1000, getAvgTemperature());
+                  Pstring, getAvgPackVoltage(), getAvgCellVolt(), LowCellVolt, HighCellVolt, (HighCellVolt - LowCellVolt) * 1000, getAvgTemperature());
   Logger::console("");
   for (int y = 1; y < 63; y++)
   {
