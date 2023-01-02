@@ -1628,8 +1628,8 @@ void VEcan() //communication with Victron system over CAN
 
   msg.id  = 0x356;
   msg.len = 8;
-  msg.buf[0] = lowByte(uint16_t(bms.getPackVoltage() * 100));
-  msg.buf[1] = highByte(uint16_t(bms.getPackVoltage() * 100));
+  msg.buf[0] = lowByte(uint16_t(bms.getAvgPackVoltage() * 100));
+  msg.buf[1] = highByte(uint16_t(bms.getAvgPackVoltage() * 100));
   msg.buf[2] = lowByte(long(currentact / 100));
   msg.buf[3] = highByte(long(currentact / 100));
   msg.buf[4] = lowByte(int16_t(bms.getAvgTemperature() * 10));
