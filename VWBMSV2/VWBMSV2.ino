@@ -1178,6 +1178,29 @@ void printbmsstat()
   SERIALCONSOLE.print(digitalRead(IN2));
   SERIALCONSOLE.print(digitalRead(IN3));
   SERIALCONSOLE.print(digitalRead(IN4));
+  
+  SERIALCONSOLE.println();
+  SERIALCONSOLE.print("- Can0 TX buffer number: ");
+  SERIALCONSOLE.print(ACAN::can0.transmitBufferCount ());
+  SERIALCONSOLE.print("/");
+  SERIALCONSOLE.print(ACAN::can0.transmitBufferSize ());
+  SERIALCONSOLE.print("-  RX buffer number: ");
+  SERIALCONSOLE.print(ACAN::can0.receiveBufferCount ());
+  SERIALCONSOLE.print("/");
+  SERIALCONSOLE.print(ACAN::can0.receiveBufferSize ());
+  SERIALCONSOLE.print("- Peak buffer number: ");
+  SERIALCONSOLE.print(ACAN::can0.transmitBufferPeakCount ());
+    SERIALCONSOLE.println();
+  SERIALCONSOLE.print("- Can1 TX buffer number: ");
+  SERIALCONSOLE.print(ACAN::can1.transmitBufferCount ());
+  SERIALCONSOLE.print("/");
+  SERIALCONSOLE.print(ACAN::can1.transmitBufferSize ());
+  SERIALCONSOLE.print("-  RX buffer number: ");
+  SERIALCONSOLE.print(ACAN::can1.receiveBufferCount ());
+  SERIALCONSOLE.print("/");
+  SERIALCONSOLE.print(ACAN::can1.receiveBufferSize ());
+  SERIALCONSOLE.print("- Peak buffer number: ");
+  SERIALCONSOLE.print(ACAN::can1.transmitBufferPeakCount ());
 
   if (bmsstatus == Charge && settings.chargertype == Outlander) {
     SERIALCONSOLE.println();
