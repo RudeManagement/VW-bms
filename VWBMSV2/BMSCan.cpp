@@ -72,11 +72,15 @@ void BMSCan::begin(uint32_t baud, int interfaceIndex) {
 
   if (interfaceIndex == 0 && !started[interfaceIndex]) {
     ACANSettings settings(baud);
+    settings.mTransmitBufferSize = 100 ;;// 30by default
+    settings.mReceiveBufferSize = 120 ; // 32BY DEFAULT
     ACAN::can0.begin(settings);
     started[interfaceIndex] = true;
   } else if (interfaceIndex == 1 && !started[interfaceIndex]) {
     #ifdef __MK66FX1M0__
     ACANSettings settings(baud);
+    settings.mTransmitBufferSize = 100  ;// 30by default
+    settings.mReceiveBufferSize = 120 ; // 32BY DEFAULT
     ACAN::can1.begin(settings);
     #endif
     started[interfaceIndex] = true;
